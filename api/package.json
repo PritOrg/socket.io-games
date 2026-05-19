@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js",
+    "test": "mocha test/*.test.js"
   },
   "keywords": [],
   "author": "",
@@ -16,6 +17,13 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.3.2",
     "socket.io": "^4.7.5",
-    "sweetalert2": "^11.10.8"
+    "sweetalert2": "^11.10.8",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "chai": "^6.2.2",
+    "mocha": "^11.7.5",
+    "socket.io-client": "^4.8.3",
+    "supertest": "^7.2.2"
   }
 }

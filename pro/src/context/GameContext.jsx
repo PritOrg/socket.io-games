@@ -1,0 +1,65 @@
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import io from 'socket.io-client';
+import logger from '../utils/logger';
+
+const GameContext = createContext();
+
+export const useGameContext = () => {
+  const context = useContext(GameContext);
+  if (!context) {
+    throw new Error('useGameContext must be used within a GameProvider');
+  }
+  return context;
+};
+
+export const GameProvider = ({ children }) => {
+  const [playerName, setPlayerName] = useState(localStorage.getItem('playerName') || '');
+  const [roomId, setRoomId] = useState(null);
+  const [socket, setSocket] = useState(null);
+  const socketRef = useRef(null);
+
+  useEffect(() => {
+    const newSocket = io('http://localhost:4000');
+    socketRef.current = newSocket;
+    setSocket(newSocket);
+
+    newSocket.on('connect', () => {
+      logger.info('SOCKET', `Connected with ID: ${newSocket.id}`);
+    });
+
+    newSocket.on('disconnect', (reason) => {
+      logger.warn('SOCKET', `Disconnected: ${reason}`);
+    });
+
+    newSocket.on('connect_error', (error) => {
+      logger.error('SOCKET', `Connection error: ${error.message}`);
+    });
+
+    logger.info('SOCKET', 'Initializing socket connection...');
+
+    return () => {
+      logger.info('SOCKET', 'Cleaning up socket connection');
+      newSocket.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (playerName) {
+      localStorage.setItem('playerName', playerName);
+    }
+  }, [playerName]);
+
+  const value = {
+    playerName,
+    setPlayerName,
+    roomId,
+    setRoomId,
+    socket
+  };
+
+  return (
+    <GameContext.Provider value={value}>
+      {children}
+    </GameContext.Provider>
+  );
+};
