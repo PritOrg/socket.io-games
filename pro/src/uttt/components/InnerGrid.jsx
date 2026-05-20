@@ -39,7 +39,7 @@ const InnerGrid = ({
         className={`
           relative aspect-square flex items-center justify-center
           text-xs sm:text-sm md:text-2xl font-bold hand-drawn transition-all duration-150
-          ${!isActive || value !== null || macroWinner !== null 
+          ${!isActive || value !== null || macroWinner !== null
             ? 'cursor-not-allowed' 
             : 'hover:bg-blue-200/50 cursor-pointer active:scale-95'}
           ${isLastMove ? 'bg-yellow-300/70 ring-2 ring-yellow-500' : ''}
