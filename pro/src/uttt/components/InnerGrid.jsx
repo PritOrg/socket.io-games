@@ -35,7 +35,7 @@ const InnerGrid = ({
       <button
         key={squareIndex}
         onClick={() => onSquareClick(squareIndex)}
-        disabled={!isActive || value !== null || macroWinner !== null}
+        disabled={!isActive || value !== null || macroWinner === 'DEAD'}
         className={`
           relative aspect-square flex items-center justify-center
           text-xs sm:text-sm md:text-2xl font-bold hand-drawn transition-all duration-150

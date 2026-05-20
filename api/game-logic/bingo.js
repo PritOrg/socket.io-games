@@ -13,6 +13,8 @@ class BingoManager {
     socket.on('bingo_markNumber', (data) => this.markNumber(socket, data));
     socket.on('bingo_achieved', (roomId) => this.bingoAchieved(socket, roomId));
     socket.on('bingo_restartGame', (roomId) => this.restartGame(socket, roomId));
+    socket.on('bingo_leaveRoom', (roomId) => this.leaveRoom(socket, roomId));
+    socket.on('bingo_reconnect', (data) => this.reconnect(socket, data));
     socket.on('disconnect', () => this.handleDisconnect(socket));
   }
 
@@ -56,7 +58,7 @@ class BingoManager {
 
   startGame(socket, roomId) {
     const room = this.rooms.get(roomId);
-    if (room && room.creator === socket.id) {
+    if (room && room.creator === socket.id && room.players.length >= 2) {
       room.gameState = 'playing';
       room.currentTurn = 0;
       this.io.to(roomId).emit('bingo_gameStarted', room.turnOrder[0]);
@@ -89,6 +91,69 @@ class BingoManager {
       room.gameState = 'ended';
       this.io.to(roomId).emit('bingo_playerWon', socket.id);
     }
+  }
+
+  leaveRoom(socket, roomId) {
+    const room = this.rooms.get(roomId?.toUpperCase());
+    if (!room) return;
+
+    const playerIndex = room.players.findIndex(p => p.id === socket.id);
+    if (playerIndex === -1) return;
+
+    room.players[playerIndex].connected = false;
+
+    if (room.gameState === 'playing') {
+      const activeCount = room.players.filter(p => p.connected).length;
+
+      if (activeCount === 0) {
+        room.emptyTimer = setTimeout(() => {
+          this.rooms.delete(roomId);
+        }, 5 * 60 * 1000);
+      } else if (activeCount === 1) {
+        room.gameState = 'paused';
+        this.io.to(room.id).emit('bingo_gamePaused', { reason: 'Opponent disconnected' });
+      }
+
+      this.io.to(room.id).emit('bingo_playerLeft', { playerId: socket.id });
+      this.sendRoomInfo(room.id);
+    }
+  }
+
+  reconnect(socket, { roomId, playerId }) {
+    const room = this.rooms.get(roomId?.toUpperCase());
+    if (!room) {
+      socket.emit('bingo_alert', { icon: 'error', title: 'Error', text: 'Room not found' });
+      return;
+    }
+
+    const player = room.players.find(p => p.id === playerId);
+    if (!player) {
+      socket.emit('bingo_alert', { icon: 'error', title: 'Error', text: 'Player not found in room' });
+      return;
+    }
+
+    socket.join(room.id);
+    player.id = socket.id;
+    player.connected = true;
+
+    if (room.emptyTimer) {
+      clearTimeout(room.emptyTimer);
+      room.emptyTimer = null;
+    }
+
+    if (room.gameState === 'paused') {
+      const activeCount = room.players.filter(p => p.connected).length;
+      if (activeCount >= 2) {
+        room.gameState = 'playing';
+        if (room.forfeitTimer) {
+          clearTimeout(room.forfeitTimer);
+          room.forfeitTimer = null;
+        }
+        this.io.to(room.id).emit('bingo_alert', { icon: 'success', title: 'Player Reconnected', text: 'Game resumed!' });
+      }
+    }
+
+    this.sendRoomInfo(room.id);
   }
 
   handleDisconnect(socket) {

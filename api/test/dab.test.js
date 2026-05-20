@@ -639,4 +639,74 @@ player2.once('dab_roomInfo', (updatedRoom) => {
       expect(result).to.equal('timeout');
     });
   });
+
+  describe('Explicit Leave', () => {
+    it('should handle dab_leaveRoom and mark player disconnected', async () => {
+      const roomId = await setupRoom('custom', 3, 3, 2);
+
+      const playerLeftPromise = new Promise((resolve) => {
+        player2.once('dab_playerLeft', resolve);
+      });
+
+      player1.emit('dab_leaveRoom', roomId);
+
+      const data = await playerLeftPromise;
+      expect(data.playerId).to.equal(player1.id);
+    });
+  });
+
+  describe('Restart Game', () => {
+    it('should fully reset state on restartGame', async () => {
+      const roomId = await setupRoom();
+
+      // Make a move first
+      await makeMove(player1, roomId, 'h', 0, 0);
+
+      // Restart
+      const roomInfoPromise = new Promise((resolve) => {
+        player1.once('dab_roomInfo', resolve);
+      });
+      player1.emit('dab_restartGame', roomId);
+      const room = await roomInfoPromise;
+
+      // All lines should be null after restart
+      const hEmpty = room.horizontalLines.every(row => row.every(cell => cell === null));
+      const vEmpty = room.verticalLines.every(row => row.every(cell => cell === null));
+      const boxesEmpty = room.boxes.every(row => row.every(cell => cell === null));
+      const scoresZero = room.scores.every(s => s === 0);
+
+      expect(hEmpty).to.equal(true);
+      expect(vEmpty).to.equal(true);
+      expect(boxesEmpty).to.equal(true);
+      expect(scoresZero).to.equal(true);
+      expect(room.lastMove).to.equal(null);
+      expect(room.currentTurn).to.equal(0);
+    });
+  });
+
+  describe('Restart & Reconnect Flow', () => {
+    it('should allow a restarted opponent to rejoin with new socket', async () => {
+      const roomId = await setupRoom();
+
+      await makeMove(player1, roomId, 'h', 0, 0);
+      await makeMove(player2, roomId, 'v', 0, 0);
+
+      // Restart from creator
+      player1.emit('dab_restartGame', roomId);
+
+      const roomInfoPromise = new Promise((resolve) => {
+        player2.once('dab_roomInfo', resolve);
+      });
+      const restartedRoom = await roomInfoPromise;
+      expect(restartedRoom.gameState).to.equal('waiting');
+
+      // Player2 (new socket) can still reconnect
+      const reconnectPromise = new Promise((resolve) => {
+        player2.once('dab_roomInfo', resolve);
+      });
+      player2.emit('dab_reconnect', { roomId, playerId: player2.id });
+      const newRoom = await reconnectPromise;
+      expect(newRoom.players[0].connected).to.equal(true);
+    });
+  });
 });

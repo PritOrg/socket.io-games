@@ -6,7 +6,7 @@ import useSound from 'use-sound';
 import confetti from 'canvas-confetti';
 import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, Trophy, SwatchBook, Plus, Minus, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Users, Trophy, SwatchBook, Plus, Minus, RotateCcw, Undo2 } from 'lucide-react';
 import logger from '../utils/logger';
 
 const PLAYER_COLORS = ['#3B82F6', '#EF4444', '#22C55E', '#F97316'];
@@ -32,6 +32,7 @@ const DabGame = () => {
   const [customPlayers, setCustomPlayers] = useState(2);
   const [myPlayerIndex, setMyPlayerIndex] = useState(-1);
   const [isPaused, setIsPaused] = useState(false);
+  const [redoRequest, setRedoRequest] = useState(null);
 
   const [playLine] = useSound('/sounds/move.mp3', { volume: 0.5 });
   const [playBox] = useSound('/sounds/win.mp3', { volume: 0.7 });
@@ -177,6 +178,67 @@ const DabGame = () => {
       });
     });
 
+    socket.on('dab_redoRequest', ({ requesterId, requesterName, targetId }) => {
+      logger.socket('⬅️', 'dab_redoRequest', { requesterId, requesterName, targetId });
+      setRedoRequest({ requesterId, requesterName, targetId });
+      Swal.fire({
+        title: 'Redo Request',
+        text: `${requesterName} wants to undo their last move. Accept?`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Accept',
+        cancelButtonText: 'Reject',
+        customClass: { popup: 'glass rounded-3xl paper-font' }
+      }).then((result) => {
+        socket.emit('dab_respondRedo', { roomId, accept: result.isConfirmed });
+        setRedoRequest(null);
+      });
+    });
+
+    socket.on('dab_redoAccepted', ({ lineType, r, c, claimedBox, scores: newScores, currentTurn: newTurn }) => {
+      logger.socket('⬅️', 'dab_redoAccepted', { lineType, r, c, claimedBox });
+      setHorizontalLines(prev => {
+        const copy = prev.map(row => [...row]);
+        if (lineType === 'h') copy[r][c] = null;
+        return copy;
+      });
+      setVerticalLines(prev => {
+        const copy = prev.map(row => [...row]);
+        if (lineType === 'v') copy[r][c] = null;
+        return copy;
+      });
+      if (claimedBox) {
+        setBoxes(prev => {
+          const copy = prev.map(row => [...row]);
+          copy[claimedBox.r][claimedBox.c] = null;
+          return copy;
+        });
+      }
+      setScores(newScores);
+      setCurrentTurn(newTurn);
+      setLastMove(null);
+      Swal.fire({
+        title: 'Redo Accepted',
+        text: 'Move has been undone.',
+        timer: 1500,
+        showConfirmButton: false,
+        customClass: { popup: 'glass rounded-3xl paper-font' }
+      });
+    });
+
+    socket.on('dab_redoResponse', ({ accepted, requesterId, requesterName, reason }) => {
+      logger.socket('⬅️', 'dab_redoResponse', { accepted, requesterName, reason });
+      if (!accepted) {
+        Swal.fire({
+          title: 'Redo Rejected',
+          text: reason || `${requesterName || 'Player'} rejected the redo request.`,
+          timer: 2000,
+          showConfirmButton: false,
+          customClass: { popup: 'glass rounded-3xl paper-font' }
+        });
+      }
+    });
+
     socket.on('dab_alert', ({ icon, title, text }) => {
       logger.socket('⬅️', 'dab_alert', { icon, title, text });
       Swal.fire({ icon, title, text, customClass: { popup: 'glass rounded-3xl paper-font' } });
@@ -191,6 +253,9 @@ const DabGame = () => {
       socket.off('dab_playerLeft');
       socket.off('dab_gamePaused');
       socket.off('dab_alert');
+      socket.off('dab_redoRequest');
+      socket.off('dab_redoAccepted');
+      socket.off('dab_redoResponse');
     };
   }, [socket, players, setRoomId, playLine, playBox]);
 
@@ -234,16 +299,40 @@ const DabGame = () => {
   };
 
   const handleLeaveRoom = () => {
-    sessionStorage.removeItem('dab_reconnect');
-    setRoomId(null);
-    setPlayers([]);
-    setGameState('waiting');
-    setBoxes([]);
-    setHorizontalLines([]);
-    setVerticalLines([]);
-    setScores([]);
-    setMyPlayerIndex(-1);
-    setIsPaused(false);
+    Swal.fire({
+      title: 'Leave Game?',
+      text: "Are you sure you want to leave? Your opponent will win by default.",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, leave',
+      customClass: { popup: 'glass rounded-3xl paper-font' }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        Swal.fire({
+          title: 'Leaving...',
+          text: 'Are you absolutely sure?',
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonText: 'Yes, leave now',
+          cancelButtonText: 'Stay',
+          customClass: { popup: 'glass rounded-3xl paper-font' }
+        }).then((confirmResult) => {
+          if (confirmResult.isConfirmed) {
+            socket.emit('dab_leaveRoom', roomId);
+            sessionStorage.removeItem('dab_reconnect');
+            setRoomId(null);
+            setPlayers([]);
+            setGameState('waiting');
+            setBoxes([]);
+            setHorizontalLines([]);
+            setVerticalLines([]);
+            setScores([]);
+            setMyPlayerIndex(-1);
+            setIsPaused(false);
+          }
+        });
+      }
+    });
   };
 
   const spacing = 40;
@@ -355,6 +444,7 @@ const DabGame = () => {
                 >
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PLAYER_COLORS[i] }} />
                   <span className="font-bold">{p.name.length > 10 ? p.name.slice(0, 10) + '...' : p.name}</span>
+                  {i === myPlayerIndex && <span className="text-xs text-gray-500">(You)</span>}
                   <span className="font-mono text-sm">{scores[i] || 0}</span>
                   {!p.connected && <span className="text-gray-400 text-xs">(DC)</span>}
                   {i === currentTurn && gameState === 'playing' && !isPaused && p.connected && (
@@ -367,9 +457,30 @@ const DabGame = () => {
             {gameState === 'playing' && !isPaused && (
               <div className="text-center paper-font text-xs sm:text-sm text-gray-700">
                 {currentTurn === myPlayerIndex ? (
-                  <span className="text-blue-600 font-bold animate-pulse">Your turn!</span>
+                  <div className="flex items-center justify-center gap-2 animate-bounce">
+                    <div className="w-3 h-3 rounded-full animate-pulse" style={{ backgroundColor: PLAYER_COLORS[myPlayerIndex] }} />
+                    <span className="text-blue-600 font-bold text-lg">Your turn!</span>
+                  </div>
                 ) : (
-                  <span>Waiting for {players[currentTurn]?.name}...</span>
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full animate-pulse" style={{ backgroundColor: PLAYER_COLORS[currentTurn] || '#3B82F6' }} />
+                      <span className="text-gray-600">Waiting for <span className="font-bold">{players[currentTurn]?.name}</span>...</span>
+                    </div>
+                    {lastMove && myPlayerIndex === (currentTurn + 1) % players.length && (
+                      <RetroButton
+                        onClick={() => {
+                          logger.socket('➡️', 'dab_requestRedo', { roomId });
+                          socket.emit('dab_requestRedo', roomId);
+                        }}
+                        variant="secondary"
+                        className="text-xs px-2 py-1 flex items-center gap-1"
+                      >
+                        <Undo2 size={12} />
+                        Request Redo
+                      </RetroButton>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -390,7 +501,7 @@ const DabGame = () => {
             )}
           </div>
 
-          <div className="glass p-2 sm:p-4 rounded-xl sm:rounded-2xl overflow-hidden">
+          <div className="glass p-2 sm:p-4 rounded-xl sm:rounded-2xl overflow-hidden flex items-center justify-center">
             <TransformWrapper
               initialScale={Math.min(1, 600 / Math.max(svgWidth, svgHeight))}
               minScale={0.3}
@@ -399,18 +510,19 @@ const DabGame = () => {
               centerOnInit
             >
               {({ zoomIn, zoomOut, resetTransform }) => (
-                <>
+                <div className="relative w-full h-full">
                   <div className="absolute top-2 right-2 z-10 flex gap-1">
                     <button onClick={() => zoomIn(0.2)} className="bg-white/80 rounded-full p-1 shadow hover:bg-white"><Plus size={16} /></button>
                     <button onClick={() => zoomOut(0.2)} className="bg-white/80 rounded-full p-1 shadow hover:bg-white"><Minus size={16} /></button>
                     <button onClick={() => resetTransform()} className="bg-white/80 rounded-full p-1 shadow hover:bg-white"><RotateCcw size={16} /></button>
                   </div>
-              <TransformComponent>
-                <div className="select-none" style={{ touchAction: 'none' }}>
+              <TransformComponent wrapperClass="!w-full !h-full" contentClass="!w-full !h-full flex items-center justify-center">
+                <div className="select-none pointer-events-none" style={{ touchAction: 'none', minWidth: svgWidth, minHeight: svgHeight }}>
                   <svg
+                    className="pointer-events-auto block"
+                    width={svgWidth}
+                    height={svgHeight}
                     viewBox={`-20 -20 ${svgWidth + 40} ${svgHeight + 40}`}
-                    className="w-full h-auto"
-                    style={{ minWidth: `${svgWidth}px` }}
                   >
                     {boxes.map((row, r) =>
                       row.map((boxOwner, c) =>
@@ -452,7 +564,7 @@ const DabGame = () => {
                               stroke="transparent"
                               strokeWidth={hitLineWidth}
                               style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
-                              onPointerDown={(e) => handleLineClick('h', r, c, e)}
+                              onPointerDown={(e) => { e.stopPropagation(); handleLineClick('h', r, c, e); }}
                             />
                           </g>
                         );
@@ -483,7 +595,7 @@ const DabGame = () => {
                               stroke="transparent"
                               strokeWidth={hitLineWidth}
                               style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
-                              onPointerDown={(e) => handleLineClick('v', r, c, e)}
+                              onPointerDown={(e) => { e.stopPropagation(); handleLineClick('v', r, c, e); }}
                             />
                           </g>
                         );
@@ -506,7 +618,7 @@ const DabGame = () => {
                   </svg>
                 </div>
               </TransformComponent>
-                </>
+                </div>
               )}
             </TransformWrapper>
           </div>

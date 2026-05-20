@@ -6,6 +6,7 @@ import confetti from 'canvas-confetti';
 import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Users, Trophy, SwatchBook, Timer } from 'lucide-react';
+import logger from '../utils/logger';
 
 const Bingo = () => {
   const { socket, playerName, roomId, setRoomId } = useGameContext();
@@ -19,6 +20,7 @@ const Bingo = () => {
   const [isCreator, setIsCreator] = useState(false);
   const [strikedOut, setStrikedOut] = useState('');
   const [turnTimer, setTurnTimer] = useState(30);
+  const [myPlayerIndex, setMyPlayerIndex] = useState(-1);
   const navigate = useNavigate();
 
   const [playPop] = useSound('/sounds/pop.mp3', { volume: 0.5 });
@@ -38,12 +40,38 @@ const Bingo = () => {
   useEffect(() => {
     if (!socket) return;
 
+    const saved = sessionStorage.getItem('bingo_reconnect');
+    if (saved) {
+      const { roomId: savedRoomId, playerId } = JSON.parse(saved);
+      logger.socket('➡️', 'bingo_reconnect', { roomId: savedRoomId, playerId });
+      socket.emit('bingo_reconnect', { roomId: savedRoomId, playerId });
+    }
+
     socket.on('bingo_roomInfo', ({ id, creator, players, gameState, currentTurn }) => {
+      logger.socket('⬅️', 'bingo_roomInfo', { roomId: id, gameState });
       setRoomId(id);
       setPlayers(players);
       setGameState(gameState);
       setCurrentTurn(currentTurn);
       setIsCreator(creator === socket.id);
+
+      const playerIndex = players.findIndex(p => p.id === socket.id);
+      setMyPlayerIndex(playerIndex);
+
+      if (gameState === 'playing' && players.length > 0) {
+        const me = players.find(p => p.id === socket.id);
+        if (me) sessionStorage.setItem('bingo_reconnect', JSON.stringify({ roomId: id, playerId: me.id }));
+      }
+    });
+
+    socket.on('bingo_gamePaused', ({ reason }) => {
+      logger.socket('⬅️', 'bingo_gamePaused', { reason });
+      Swal.fire({
+        title: 'Game Paused',
+        text: reason,
+        icon: 'warning',
+        customClass: { popup: 'glass rounded-3xl paper-font' }
+      });
     });
 
     socket.on('bingo_gameStarted', (firstPlayerId) => {
@@ -100,6 +128,7 @@ const Bingo = () => {
         customClass: { popup: 'glass rounded-3xl paper-font' }
       });
       setGameState('ended');
+      sessionStorage.removeItem('bingo_reconnect');
     });
 
     socket.on('bingo_playerLeft', (playerId) => {
@@ -123,6 +152,7 @@ const Bingo = () => {
       socket.off('bingo_nextTurn');
       socket.off('bingo_playerWon');
       socket.off('bingo_playerLeft');
+      socket.off('bingo_gamePaused');
       socket.off('bingo_alert');
     };
   }, [socket, players, setRoomId, playPop, playWin, playTurn]);
@@ -193,6 +223,41 @@ const Bingo = () => {
     socket.emit('bingo_restartGame', roomId);
   };
 
+  const handleLeaveRoom = () => {
+    Swal.fire({
+      title: 'Leave Game?',
+      text: "Are you sure you want to leave?",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, leave',
+      customClass: { popup: 'glass rounded-3xl paper-font' }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        Swal.fire({
+          title: 'Leaving...',
+          text: 'Are you absolutely sure?',
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonText: 'Yes, leave now',
+          cancelButtonText: 'Stay',
+          customClass: { popup: 'glass rounded-3xl paper-font' }
+        }).then((confirmResult) => {
+          if (confirmResult.isConfirmed) {
+            socket.emit('bingo_leaveRoom', roomId);
+            sessionStorage.removeItem('bingo_reconnect');
+            setRoomId(null);
+            setPlayers([]);
+            setGameState('waiting');
+            setCurrentTurn(null);
+            setNumbers(Array.from({ length: 25 }, (_, i) => i + 1).sort(() => Math.random() - 0.5));
+            setStrikedOut('');
+            setIsCreator(false);
+          }
+        });
+      }
+    });
+  };
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4">
       <RetroButton 
@@ -254,8 +319,12 @@ const Bingo = () => {
               <div className="flex flex-col gap-3">
                 {players.map(p => (
                   <div key={p.id} className={`flex items-center justify-between p-2 rounded-lg transition-all
-                    ${p.id === currentTurn ? 'bg-purple-100 scale-105' : 'opacity-70'}`}>
-                    <span className="font-bold paper-font truncate flex-1">{p.name}</span>
+                    ${p.id === currentTurn ? 'bg-purple-100 scale-105 ring-2 ring-purple-400' : 'opacity-70'}`}>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${p.id === currentTurn ? 'bg-purple-500 animate-pulse' : 'bg-gray-300'}`} />
+                      <span className="font-bold paper-font truncate flex-1">{p.name}</span>
+                      {p.id === socket?.id && <span className="text-xs text-gray-500">(You)</span>}
+                    </div>
                     {p.id === currentTurn && <Users size={16} className="text-purple-500 animate-pulse" />}
                   </div>
                 ))}
@@ -268,6 +337,12 @@ const Bingo = () => {
               </RetroButton>
             )}
 
+            {(gameState === 'ready' || gameState === 'playing') && (
+              <RetroButton onClick={handleLeaveRoom} variant="secondary" className="w-full text-sm py-2 mt-2">
+                Leave Room
+              </RetroButton>
+            )}
+
             {gameState === 'playing' && (
               <div className="glass p-6 rounded-2xl text-center">
                 <div className="text-sm paper-font text-gray-500 mb-1 flex items-center justify-center gap-1">
@@ -277,12 +352,12 @@ const Bingo = () => {
                 <div className={`text-4xl font-bold paper-font ${turnTimer < 10 ? 'text-red-500 animate-ping' : 'text-purple-600'}`}>
                   {turnTimer}s
                 </div>
-                {currentTurn === socket?.id && (
-                  <div className="mt-2 text-purple-600 flex items-center justify-center gap-1 text-sm animate-bounce">
-                    <Trophy size={14} />
-                    Your Turn!
-                  </div>
-                )}
+              {currentTurn === socket?.id && (
+                <div className="mt-2 text-purple-600 flex items-center justify-center gap-1 text-lg font-bold animate-bounce">
+                  <Trophy size={18} />
+                  Your Turn!
+                </div>
+              )}
               </div>
             )}
           </div>

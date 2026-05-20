@@ -21,6 +21,8 @@ vi.mock('socket.io-client', () => ({
 describe('Bingo', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
+    sessionStorage.clear();
   });
 
   it('emits markNumber when a cell is clicked', async () => {

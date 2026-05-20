@@ -16,6 +16,7 @@ const TicTacToe = () => {
   const [gameState, setGameState] = useState('waiting');
   const [winningCells, setWinningCells] = useState([]);
   const [mySymbol, setMySymbol] = useState(null);
+  const [myPlayerIndex, setMyPlayerIndex] = useState(-1);
   const navigate = useNavigate();
 
   const [playMove] = useSound('/sounds/move.mp3', { volume: 0.5 });
@@ -26,6 +27,13 @@ const TicTacToe = () => {
 
     logger.info('TTT', `Socket connected: ${socket.id}`);
 
+    const saved = sessionStorage.getItem('ttt_reconnect');
+    if (saved) {
+      const { roomId: savedRoomId, playerId } = JSON.parse(saved);
+      logger.socket('➡️', 'ttt_reconnect', { roomId: savedRoomId, playerId });
+      socket.emit('ttt_reconnect', { roomId: savedRoomId, playerId });
+    }
+
     socket.on('ttt_roomInfo', ({ id, players, gameState, currentTurn, board }) => {
       logger.socket('⬅️', 'ttt_roomInfo', { roomId: id, gameState });
       setRoomId(id);
@@ -33,11 +41,23 @@ const TicTacToe = () => {
       setGameState(gameState);
       setCurrentTurn(currentTurn);
       if (board) setBoard(board);
-      
+
       const playerIndex = players.findIndex(p => p.id === socket.id);
       if (playerIndex !== -1) {
         setMySymbol(playerIndex === 0 ? 'X' : 'O');
+        setMyPlayerIndex(playerIndex);
+        sessionStorage.setItem('ttt_reconnect', JSON.stringify({ roomId: id, playerId: players[playerIndex].id }));
       }
+    });
+
+    socket.on('ttt_gamePaused', ({ reason }) => {
+      logger.socket('⬅️', 'ttt_gamePaused', { reason });
+      Swal.fire({
+        title: 'Game Paused',
+        text: reason,
+        icon: 'warning',
+        customClass: { popup: 'glass rounded-3xl paper-font' }
+      });
     });
 
     socket.on('ttt_gameStarted', () => {
@@ -95,6 +115,7 @@ const TicTacToe = () => {
         customClass: { popup: 'glass rounded-3xl paper-font' }
       });
       setGameState('ended');
+      sessionStorage.removeItem('ttt_reconnect');
     });
 
     socket.on('ttt_gameDraw', () => {
@@ -106,6 +127,7 @@ const TicTacToe = () => {
         customClass: { popup: 'glass rounded-3xl paper-font' }
       });
       setGameState('ended');
+      sessionStorage.removeItem('ttt_reconnect');
     });
 
     socket.on('ttt_playerLeft', (playerId) => {
@@ -134,6 +156,7 @@ const TicTacToe = () => {
       socket.off('ttt_gameWon');
       socket.off('ttt_gameDraw');
       socket.off('ttt_playerLeft');
+      socket.off('ttt_gamePaused');
       socket.off('ttt_alert');
     };
   }, [socket, players, setRoomId, playMove, playWin]);
@@ -167,6 +190,41 @@ const TicTacToe = () => {
   const handleRestartGame = () => {
     logger.socket('➡️', 'ttt_restartGame', { roomId });
     socket.emit('ttt_restartGame', roomId);
+  };
+
+  const handleLeaveRoom = () => {
+    Swal.fire({
+      title: 'Leave Game?',
+      text: 'Are you sure you want to leave?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, leave',
+      customClass: { popup: 'glass rounded-3xl paper-font' }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        Swal.fire({
+          title: 'Leaving...',
+          text: 'Are you absolutely sure?',
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonText: 'Yes, leave now',
+          cancelButtonText: 'Stay',
+          customClass: { popup: 'glass rounded-3xl paper-font' }
+        }).then((confirmResult) => {
+          if (confirmResult.isConfirmed) {
+            socket.emit('ttt_leaveRoom', roomId);
+            sessionStorage.removeItem('ttt_reconnect');
+            setRoomId(null);
+            setPlayers([]);
+            setGameState('waiting');
+            setBoard(Array(9).fill(null));
+            setWinningCells([]);
+            setCurrentTurn(null);
+            setMySymbol(null);
+          }
+        });
+      }
+    });
   };
 
   const renderBoard = () => (
@@ -220,7 +278,7 @@ return (
             </div>
             <div className="flex gap-2 sm:gap-4 text-xs sm:text-sm">
               {players.map((p, i) => (
-                <div key={p.id} className={`flex items-center gap-1 sm:gap-2 transition-all duration-300 ${p.id === currentTurn ? 'scale-105' : 'opacity-60'}`}>
+                <div key={p.id} className={`flex items-center gap-1 sm:gap-2 transition-all duration-300 ${p.id === currentTurn ? 'scale-105 ring-2 ring-blue-500 rounded-full px-2 py-1' : 'opacity-60'}`}>
                   {p.id === currentTurn ? (
                     <Users size={12} className="sm:w-4 text-blue-500 animate-pulse" />
                   ) : (
@@ -229,6 +287,10 @@ return (
                   <span className="font-bold paper-font">
                     {p.name.length > 8 ? p.name.slice(0,8)+'...' : p.name}
                   </span>
+                  {i === myPlayerIndex && <span className="text-xs text-gray-500">(You)</span>}
+                  {p.id === currentTurn && (
+                    <span className="text-xs text-blue-600 font-bold">Playing</span>
+                  )}
                 </div>
               ))}
             </div>
@@ -242,18 +304,26 @@ return (
             </RetroButton>
           )}
 
+          {(gameState === 'ready' || gameState === 'playing') && (
+            <RetroButton onClick={handleLeaveRoom} variant="secondary" className="mt-2 text-xs sm:text-sm px-3 py-1">
+              Leave Room
+            </RetroButton>
+          )}
+
           <div className="text-center paper-font text-xs sm:text-lg text-gray-700 flex flex-col items-center gap-2">
             {gameState === 'playing' ? (
               currentTurn === socket?.id ? (
-                <div className="flex items-center gap-1 sm:gap-2 text-blue-600 animate-bounce">
-                  <Trophy size={16} className="sm:w-6" />
+                <div className="flex items-center gap-1 sm:gap-2 text-blue-600 animate-bounce text-xl font-bold">
+                  <Trophy size={20} className="sm:w-6" />
                   <span>Your turn!</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-1 sm:gap-2">
-                  <div className="w-3 h-3 sm:w-4 sm:h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                  <span className="hidden sm:inline">Waiting for {players.find(p => p.id === currentTurn)?.name}...</span>
-                  <span className="sm:hidden">Waiting...</span>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1 sm:gap-2 text-gray-600">
+                    <div className="w-3 h-3 sm:w-4 sm:h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    <span className="hidden sm:inline">Waiting for <span className="font-bold">{players.find(p => p.id === currentTurn)?.name}</span>...</span>
+                    <span className="sm:hidden">Waiting...</span>
+                  </div>
                 </div>
               )
             ) : (

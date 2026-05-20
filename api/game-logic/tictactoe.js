@@ -9,6 +9,8 @@ class TicTacToeManager {
     socket.on('ttt_joinRoom', (data) => this.joinRoom(socket, data));
     socket.on('ttt_makeMove', (data) => this.makeMove(socket, data));
     socket.on('ttt_restartGame', (roomId) => this.restartGame(socket, roomId));
+    socket.on('ttt_leaveRoom', (roomId) => this.leaveRoom(socket, roomId));
+    socket.on('ttt_reconnect', (data) => this.reconnect(socket, data));
     socket.on('disconnect', () => this.handleDisconnect(socket));
   }
 
@@ -32,10 +34,12 @@ class TicTacToeManager {
     socket.join(roomId);
     const room = {
       id: roomId,
-      players: [{ id: socket.id, name: playerName }],
+      players: [{ id: socket.id, name: playerName, connected: true }],
       board: Array(9).fill(null),
       gameState: 'waiting',
-      currentTurn: null
+      currentTurn: null,
+      emptyTimer: null,
+      forfeitTimer: null
     };
     this.rooms.set(roomId, room);
     this.sendRoomInfo(roomId);
@@ -49,7 +53,7 @@ class TicTacToeManager {
     }
 
     socket.join(room.id);
-    room.players.push({ id: socket.id, name: playerName });
+    room.players.push({ id: socket.id, name: playerName, connected: true });
     room.gameState = 'playing';
     room.currentTurn = room.players[0].id;
     
@@ -66,6 +70,69 @@ class TicTacToeManager {
       this.io.to(roomId).emit('ttt_gameRestarted');
       this.sendRoomInfo(roomId);
     }
+  }
+
+  leaveRoom(socket, roomId) {
+    const room = this.rooms.get(roomId?.toUpperCase());
+    if (!room) return;
+
+    const playerIndex = room.players.findIndex(p => p.id === socket.id);
+    if (playerIndex === -1) return;
+
+    room.players[playerIndex].connected = false;
+
+    if (room.gameState === 'playing') {
+      const activeCount = room.players.filter(p => p.connected).length;
+
+      if (activeCount === 0) {
+        room.emptyTimer = setTimeout(() => {
+          this.rooms.delete(roomId);
+        }, 5 * 60 * 1000);
+      } else if (activeCount === 1) {
+        room.gameState = 'paused';
+        this.io.to(room.id).emit('ttt_gamePaused', { reason: 'Opponent disconnected' });
+      }
+
+      this.io.to(room.id).emit('ttt_playerLeft', { playerId: socket.id });
+      this.sendRoomInfo(room.id);
+    }
+  }
+
+  reconnect(socket, { roomId, playerId }) {
+    const room = this.rooms.get(roomId?.toUpperCase());
+    if (!room) {
+      socket.emit('ttt_alert', { icon: 'error', title: 'Error', text: 'Room not found' });
+      return;
+    }
+
+    const player = room.players.find(p => p.id === playerId);
+    if (!player) {
+      socket.emit('ttt_alert', { icon: 'error', title: 'Error', text: 'Player not found in room' });
+      return;
+    }
+
+    socket.join(room.id);
+    player.id = socket.id;
+    player.connected = true;
+
+    if (room.emptyTimer) {
+      clearTimeout(room.emptyTimer);
+      room.emptyTimer = null;
+    }
+
+    if (room.gameState === 'paused') {
+      const activeCount = room.players.filter(p => p.connected).length;
+      if (activeCount >= 2) {
+        room.gameState = 'playing';
+        if (room.forfeitTimer) {
+          clearTimeout(room.forfeitTimer);
+          room.forfeitTimer = null;
+        }
+        this.io.to(room.id).emit('ttt_alert', { icon: 'success', title: 'Player Reconnected', text: 'Game resumed!' });
+      }
+    }
+
+    this.sendRoomInfo(room.id);
   }
 
   makeMove(socket, { roomId, position }) {
@@ -96,17 +163,25 @@ class TicTacToeManager {
 
   handleDisconnect(socket) {
     for (const [roomId, room] of this.rooms.entries()) {
-      const index = room.players.findIndex(p => p.id === socket.id);
-      if (index !== -1) {
-        room.players = room.players.filter(p => p.id !== socket.id);
-        if (room.players.length === 0) {
-          this.rooms.delete(roomId);
-        } else {
-          room.gameState = 'waiting';
-          room.board = Array(9).fill(null);
-          this.io.to(roomId).emit('ttt_playerLeft', socket.id);
-          this.sendRoomInfo(roomId);
+      const playerIndex = room.players.findIndex(p => p.id === socket.id);
+      if (playerIndex === -1) continue;
+
+      room.players[playerIndex].connected = false;
+
+      if (room.gameState === 'playing') {
+        const activeCount = room.players.filter(p => p.connected).length;
+
+        if (activeCount === 0) {
+          room.emptyTimer = setTimeout(() => {
+            this.rooms.delete(roomId);
+          }, 5 * 60 * 1000);
+        } else if (activeCount === 1) {
+          room.gameState = 'paused';
+          this.io.to(room.id).emit('ttt_gamePaused', { reason: 'Opponent disconnected' });
         }
+
+        this.io.to(room.id).emit('ttt_playerLeft', { playerId: socket.id });
+        this.sendRoomInfo(room.id);
       }
     }
   }

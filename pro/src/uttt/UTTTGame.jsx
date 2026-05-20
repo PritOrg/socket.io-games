@@ -20,6 +20,7 @@ const UTTTGame = () => {
   const [scores, setScores] = useState({ X: 0, O: 0 });
   const [lastMove, setLastMove] = useState(null);
   const [mySymbol, setMySymbol] = useState(null);
+  const [myPlayerIndex, setMyPlayerIndex] = useState(-1);
   const navigate = useNavigate();
 
   const [playMove] = useSound('/sounds/move.mp3', { volume: 0.5 });
@@ -29,6 +30,13 @@ const UTTTGame = () => {
     if (!socket) return;
 
     logger.info('UTTT', `Socket connected: ${socket.id}`);
+
+    const saved = sessionStorage.getItem('uttt_reconnect');
+    if (saved) {
+      const { roomId: savedRoomId, playerId } = JSON.parse(saved);
+      logger.socket('➡️', 'uttt_reconnect', { roomId: savedRoomId, playerId });
+      socket.emit('uttt_reconnect', { roomId: savedRoomId, playerId });
+    }
 
     socket.on('uttt_roomInfo', (room) => {
       logger.socket('⬅️', 'uttt_roomInfo', { roomId: room.id, gameState: room.gameState });
@@ -41,12 +49,24 @@ const UTTTGame = () => {
       if (room.activeGrid !== undefined) setActiveGrid(room.activeGrid);
       if (room.scores) setScores(room.scores);
       if (room.lastMove) setLastMove(room.lastMove);
-      
+
       const playerIndex = room.players.findIndex(p => p.id === socket.id);
       if (playerIndex !== -1) {
         setMySymbol(playerIndex === 0 ? 'X' : 'O');
-        logger.info('UTTT', `You are player ${playerIndex + 1} (${playerIndex === 0 ? 'X' : 'O'})`);
+        setMyPlayerIndex(playerIndex);
+        sessionStorage.setItem('uttt_reconnect', JSON.stringify({ roomId: room.id, playerId: room.players[playerIndex].id }));
       }
+    });
+
+    socket.on('uttt_gamePaused', ({ reason }) => {
+      logger.socket('⬅️', 'uttt_gamePaused', { reason });
+      setIsPaused(true);
+      Swal.fire({
+        title: 'Game Paused',
+        text: reason,
+        icon: 'warning',
+        customClass: { popup: 'glass rounded-3xl paper-font' }
+      });
     });
 
     socket.on('uttt_gameState', (room) => {
@@ -82,7 +102,7 @@ const UTTTGame = () => {
       });
     });
 
-socket.on('uttt_gameOver', ({ winner, symbol, scores, reason }) => {
+    socket.on('uttt_gameOver', ({ winner, symbol, scores, reason }) => {
        logger.socket('⬅️', 'uttt_gameOver', { winner, symbol, scores, reason });
        playWin();
        confetti({
@@ -109,8 +129,9 @@ socket.on('uttt_gameOver', ({ winner, symbol, scores, reason }) => {
          icon: 'success',
          customClass: { popup: 'glass rounded-3xl paper-font' }
        });
-       setGameState('ended');
-     });
+        setGameState('ended');
+        sessionStorage.removeItem('uttt_reconnect');
+      });
 
     socket.on('uttt_error', ({ message }) => {
       logger.socket('⬅️', 'uttt_error', { message });
@@ -143,6 +164,7 @@ socket.on('uttt_gameOver', ({ winner, symbol, scores, reason }) => {
       socket.off('uttt_gameOver');
       socket.off('uttt_error');
       socket.off('uttt_playerLeft');
+      socket.off('uttt_gamePaused');
     };
   }, [socket, players, setRoomId, playWin]);
 
@@ -180,6 +202,43 @@ socket.on('uttt_gameOver', ({ winner, symbol, scores, reason }) => {
   const handleRestartGame = () => {
     logger.socket('➡️', 'uttt_restartGame', { roomId });
     socket.emit('uttt_restartGame', roomId);
+  };
+
+  const handleLeaveRoom = () => {
+    Swal.fire({
+      title: 'Leave Game?',
+      text: 'Are you sure you want to leave?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, leave',
+      customClass: { popup: 'glass rounded-3xl paper-font' }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        Swal.fire({
+          title: 'Leaving...',
+          text: 'Are you absolutely sure?',
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonText: 'Yes, leave now',
+          cancelButtonText: 'Stay',
+          customClass: { popup: 'glass rounded-3xl paper-font' }
+        }).then((confirmResult) => {
+          if (confirmResult.isConfirmed) {
+            socket.emit('uttt_leaveRoom', roomId);
+            sessionStorage.removeItem('uttt_reconnect');
+            setRoomId(null);
+            setPlayers([]);
+            setGameState('waiting');
+            setBoard(Array(9).fill(null).map(() => Array(9).fill(null)));
+            setMacroBoard(Array(9).fill(null));
+            setActiveGrid(null);
+            setScores({ X: 0, O: 0 });
+            setLastMove(null);
+            setMySymbol(null);
+          }
+        });
+      }
+    });
   };
 
   const getMyScore = () => {
@@ -233,9 +292,9 @@ socket.on('uttt_gameOver', ({ winner, symbol, scores, reason }) => {
 
             <div className="flex gap-2 sm:gap-4 text-xs sm:text-sm">
               {players.map((p, i) => (
-                <div 
-                  key={p.id} 
-                  className={`flex items-center gap-1 sm:gap-2 transition-all duration-300 ${p.id === currentTurn ? 'scale-105' : 'opacity-60'}`}
+                <div
+                  key={p.id}
+                  className={`flex items-center gap-1 sm:gap-2 transition-all duration-300 ${p.id === currentTurn ? 'scale-105 ring-2 ring-blue-500 rounded-full px-2 py-1' : 'opacity-60'}`}
                 >
                   {p.id === currentTurn ? (
                     <Users size={12} className="sm:w-4 text-blue-500 animate-pulse" />
@@ -245,6 +304,10 @@ socket.on('uttt_gameOver', ({ winner, symbol, scores, reason }) => {
                   <span className="font-bold paper-font text-xs sm:text-base">
                     {p.name.length > 8 ? p.name.slice(0,8)+'...' : p.name} ({i === 0 ? 'X' : 'O'})
                   </span>
+                  {i === myPlayerIndex && <span className="text-xs text-gray-500">(You)</span>}
+                  {p.id === currentTurn && (
+                    <span className="text-xs text-blue-600 font-bold">Playing</span>
+                  )}
                 </div>
               ))}
             </div>
@@ -260,18 +323,26 @@ socket.on('uttt_gameOver', ({ winner, symbol, scores, reason }) => {
             />
           </div>
 
+          {(gameState === 'waiting' || gameState === 'playing') && (
+            <RetroButton onClick={handleLeaveRoom} variant="secondary" className="mt-2 self-center text-xs sm:text-base px-3 sm:px-6 py-1 sm:py-2">
+              Leave Room
+            </RetroButton>
+          )}
+
           <div className="text-center paper-font text-xs sm:text-lg text-gray-700 flex flex-col items-center gap-2">
             {gameState === 'playing' ? (
               currentTurn === socket?.id ? (
-                <div className="flex items-center gap-1 sm:gap-2 text-blue-600 animate-bounce">
-                  <Trophy size={16} className="sm:w-6" />
+                <div className="flex items-center gap-1 sm:gap-2 text-blue-600 animate-bounce text-xl font-bold">
+                  <Trophy size={20} className="sm:w-6" />
                   <span>Your turn!</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-1 sm:gap-2">
-                  <div className="w-3 h-3 sm:w-4 sm:h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                  <span className="hidden sm:inline">Waiting for {players.find(p => p.id === currentTurn)?.name}...</span>
-                  <span className="sm:hidden">Waiting...</span>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1 sm:gap-2 text-gray-600">
+                    <div className="w-3 h-3 sm:w-4 sm:h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    <span className="hidden sm:inline">Waiting for <span className="font-bold">{players.find(p => p.id === currentTurn)?.name}</span>...</span>
+                    <span className="sm:hidden">Waiting...</span>
+                  </div>
                 </div>
               )
             ) : gameState === 'waiting' ? (
