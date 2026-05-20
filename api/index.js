@@ -26,6 +26,7 @@ const io = socketIo(server, {
 });
 
 const PORT = process.env.PORT || 4000;
+const HOST = process.env.HOST || '0.0.0.0';
 
 const bingoManager = new BingoManager(io);
 const tictactoeManager = new TicTacToeManager(io);
@@ -46,7 +47,7 @@ io.on('connection', (socket) => {
 });
 
 if (process.env.NODE_ENV !== 'test') {
-  server.listen(PORT, () => {
+  server.listen(PORT, HOST, () => {
     logger.success('SERVER', `Unified Optimized Server running on port ${PORT}`);
   });
 }
