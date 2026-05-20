@@ -213,7 +213,7 @@ class UTTTManager {
     }
 
     const nextGrid = squareIndex;
-    if (room.macroBoard[nextGrid] !== null) {
+    if (room.macroBoard[nextGrid] === 'DEAD') {
       room.activeGrid = null;
     } else {
       room.activeGrid = nextGrid;

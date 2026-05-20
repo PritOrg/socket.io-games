@@ -25,13 +25,81 @@ class BingoManager {
       id: roomId,
       creator: socket.id,
       players: [{ id: socket.id, name: creatorName }],
-      currentTurn: 0,
-      gameState: 'waiting',
-      turnOrder: [socket.id]
+      currentTurn: null,
+      turnOrder: [socket.id],
+      gameState: 'waiting'
     };
     this.rooms.set(roomId, room);
     this.sendRoomInfo(roomId);
     socket.emit('bingo_alert', { icon: 'success', title: 'Room Created', text: `Bingo Room ${roomId}` });
+  }
+
+  joinRoom(socket, { roomId, playerName }) {
+    const room = this.rooms.get(roomId?.toUpperCase());
+    if (!room) {
+      socket.emit('bingo_alert', { icon: 'warning', title: 'Error', text: 'Room not found' });
+      return;
+    }
+    if (room.players.length >= 10) {
+      socket.emit('bingo_alert', { icon: 'warning', title: 'Full', text: 'Room is full' });
+      return;
+    }
+
+    socket.join(room.id);
+    room.players.push({ id: socket.id, name: playerName });
+    room.turnOrder.push(socket.id);
+
+    if (room.players.length >= 2 && room.gameState === 'waiting') {
+      room.gameState = 'ready';
+      room.currentTurn = room.players[0].id;
+    }
+
+    this.sendRoomInfo(room.id);
+  }
+
+  startGame(socket, roomId) {
+    const room = this.rooms.get(roomId);
+    if (!room || room.creator !== socket.id) return;
+    if (room.players.length < 2) {
+      socket.emit('bingo_alert', { icon: 'warning', title: 'Wait', text: 'Need at least 2 players!' });
+      return;
+    }
+    if (room.gameState !== 'ready') return;
+    room.gameState = 'playing';
+    const firstPlayerId = room.turnOrder[0];
+    room.currentTurn = firstPlayerId;
+    this.io.to(roomId).emit('bingo_gameStarted', firstPlayerId);
+    this.sendRoomInfo(roomId);
+  }
+
+  restartGame(socket, roomId) {
+    const room = this.rooms.get(roomId);
+    if (!room || room.creator !== socket.id) return;
+    room.gameState = 'ready';
+    room.currentTurn = room.players[0].id;
+    this.io.to(roomId).emit('bingo_gameRestarted');
+    this.sendRoomInfo(roomId);
+  }
+
+  markNumber(socket, { roomId, number }) {
+    const room = this.rooms.get(roomId);
+    if (!room || room.gameState !== 'playing') return;
+    if (room.currentTurn !== socket.id) return;
+
+    this.io.to(roomId).emit('bingo_numberMarked', { number, playerId: socket.id });
+
+    const currentIndex = room.turnOrder.indexOf(socket.id);
+    const nextIndex = (currentIndex + 1) % room.turnOrder.length;
+    room.currentTurn = room.turnOrder[nextIndex];
+    this.io.to(roomId).emit('bingo_nextTurn', room.currentTurn);
+  }
+
+  bingoAchieved(socket, roomId) {
+    const room = this.rooms.get(roomId);
+    if (!room || room.gameState !== 'playing') return;
+    if (room.currentTurn !== socket.id) return;
+    room.gameState = 'ended';
+    this.io.to(roomId).emit('bingo_playerWon', socket.id);
   }
 
   joinRoom(socket, { roomId, playerName }) {

@@ -161,19 +161,16 @@ const Bingo = () => {
     const size = 5;
     const lines = [];
 
-    // Horizontal
     for (let i = 0; i < size; i++) {
       lines.push(Array.from({ length: size }, (_, j) => i * size + j));
     }
-    // Vertical
     for (let i = 0; i < size; i++) {
       lines.push(Array.from({ length: size }, (_, j) => i + j * size));
     }
-    // Diagonals
     lines.push(Array.from({ length: size }, (_, i) => i * size + i));
     lines.push(Array.from({ length: size }, (_, i) => (i + 1) * size - (i + 1)));
 
-    const completedLinesCount = lines.filter(line => line.every(cell => numbers[cell] === 'X')).length;
+    const completedLinesCount = lines.filter(line => line.every(cell => typeof numbers[cell] === 'string')).length;
     const newStrikedOut = 'BINGO'.slice(0, Math.min(completedLinesCount, 5));
 
     if (newStrikedOut.length > strikedOut.length) {
@@ -188,10 +185,12 @@ const Bingo = () => {
     checkForWin();
   }, [numbers, checkForWin]);
 
-  const handleCellClick = (number) => {
-    if (gameState === 'playing' && currentTurn === socket?.id && number !== 'X') {
-      socket.emit('bingo_markNumber', { roomId, number });
-    }
+  handleCellClick = (number) => {
+    if (gameState !== 'playing') return;
+    if (currentTurn !== socket?.id) return;
+    if (typeof number === 'string') return;
+
+    socket.emit('bingo_markNumber', { roomId, number });
   };
 
   const handleCreateRoom = () => {
@@ -299,12 +298,12 @@ const Bingo = () => {
                 <button
                   key={i}
                   onClick={() => handleCellClick(n)}
-                  disabled={n === 'X' || gameState !== 'playing' || currentTurn !== socket?.id}
+                  disabled={typeof n === 'string' || gameState !== 'playing' || currentTurn !== socket?.id}
                   className={`glass text-xl md:text-3xl paper-font flex items-center justify-center transition-all duration-300 rounded-xl
-                    ${n === 'X' ? 'bg-purple-500/50 text-white rotate-12' : 'hover:bg-white/40 cursor-pointer'}
-                    ${gameState === 'playing' && currentTurn === socket?.id && n !== 'X' ? 'ring-2 ring-purple-400 ring-offset-2' : ''}`}
+                    ${typeof n === 'string' ? 'bg-purple-500/50 text-white rotate-12' : 'hover:bg-white/40 cursor-pointer'}
+                    ${gameState === 'playing' && currentTurn === socket?.id && typeof n !== 'string' ? 'ring-2 ring-purple-400 ring-offset-2' : ''}`}
                 >
-                  {n === 'X' ? '★' : n}
+                  {typeof n === 'string' ? '★' : n}
                 </button>
               ))}
             </div>
