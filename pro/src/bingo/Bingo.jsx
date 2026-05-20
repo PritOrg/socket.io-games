@@ -185,7 +185,7 @@ const Bingo = () => {
     checkForWin();
   }, [numbers, checkForWin]);
 
-  handleCellClick = (number) => {
+  const handleCellClick = (number) => {
     if (gameState !== 'playing') return;
     if (currentTurn !== socket?.id) return;
     if (typeof number === 'string') return;
