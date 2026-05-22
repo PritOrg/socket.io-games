@@ -8,7 +8,9 @@ import {
   PlayerBadge,
   LeaveButton,
   sketchPopupClass,
+  GameLayout,
 } from "../components/ui";
+import useGameHandlers from "../hooks/useGameHandlers";
 import useSound from "use-sound";
 import confetti from "canvas-confetti";
 import Swal from "sweetalert2";
@@ -404,7 +406,7 @@ const DabGame = () => {
 
   if (!roomId) {
     return (
-      <div className="min-h-screen bg-paper flex items-center justify-center p-4">
+      <GameLayout socket={socket} roomId={null} gamePrefix="dab" players={[]}>
         <SketchCard className="p-8 max-w-md w-full">
           <h2 className="text-3xl font-sketch mb-4 text-center text-ink">
             Dots & Boxes
@@ -474,12 +476,13 @@ const DabGame = () => {
             )}
           </SketchBorder>
         </SketchCard>
-      </div>
+      </GameLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-paper p-4">
+    <GameLayout socket={socket} roomId={roomId} gamePrefix="dab" players={players}>
+      <div className="w-full p-4">
       {gameState === "waiting" && (
         <div className="max-w-4xl mx-auto relative z-10">
           <div className="sketch-card p-6 mb-6">
@@ -1003,7 +1006,8 @@ const DabGame = () => {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </GameLayout>
   );
 };
 

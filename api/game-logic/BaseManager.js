@@ -45,7 +45,7 @@ class BaseManager {
     if (!player) return;
 
     player.connected = false;
-    if (callbacks?.onPlayerLeft) callbacks.onPlayerLeft(socket, room, player);
+    if (callbacks?.onPlayerLeft) callbacks.onPlayerLeft(room, socket, player);
   }
 
   handleReconnection(socket, roomId, playerId, roomCallbacks, gamePrefix) {

@@ -44,18 +44,23 @@ describe('Cross-Game Integration Tests', function () {
   describe('Room Isolation', () => {
     it('Bingo player should not receive Dab game events', (done) => {
       player1.emit('bingo_createRoom', 'Alice');
-      player1.once('bingo_roomInfo', (room) => {
-        const roomId = room.id;
+      player1.once('bingo_roomInfo', (bingoRoom) => {
+        player2.emit('dab_createRoom', { mode: 'classic', playerName: 'Bob' });
+        player2.once('dab_roomInfo', (dabRoom) => {
+          const bingoGotDabEvent = new Promise((resolve) => {
+            player1.once('dab_roomInfo', () => resolve(true));
+            player1.once('dab_gameStarted', () => resolve(true));
+            player1.once('dab_moveResult', () => resolve(true));
+            setTimeout(() => resolve(false), 300);
+          });
 
-        const wrongEventPromise = new Promise((resolve) => {
-          player2.once('dab_alert', () => resolve('got dab event'));
-          setTimeout(() => resolve('timeout'), 500);
-        });
-
-        player2.emit('dab_joinRoom', { roomId, playerName: 'Bob' });
-        wrongEventPromise.then((result) => {
-          expect(result).to.equal('timeout');
-          done();
+          player2.emit('dab_joinRoom', { roomId: dabRoom.id, playerName: 'Charlie' });
+          player2.once('dab_gameStarted', () => {
+            bingoGotDabEvent.then((gotEvent) => {
+              expect(gotEvent).to.equal(false);
+              done();
+            });
+          });
         });
       });
     });
@@ -76,19 +81,16 @@ describe('Cross-Game Integration Tests', function () {
       player1.once('bingo_roomInfo', (room) => {
         const bingoRoomId = room.id;
 
-        player3.emit('ttt_createRoom', 'Charlie');
-        player3.once('ttt_roomInfo', (tttRoom) => {
-          const tttRoomId = tttRoom.id;
+        const tttJoinResult = new Promise((resolve) => {
+          player2.once('ttt_alert', (alert) => resolve(alert));
+          setTimeout(() => resolve('timeout'), 500);
+        });
 
-          const tttJoinBingoPromise = new Promise((resolve) => {
-            player2.once('ttt_alert', resolve);
-            setTimeout(() => resolve('timeout'), 500);
-          });
-          player2.emit('ttt_joinRoom', { roomId: bingoRoomId, playerName: 'Bob' });
-          tttJoinBingoPromise.then((result) => {
-            expect(result).to.equal('timeout');
-            done();
-          });
+        player2.emit('ttt_joinRoom', { roomId: bingoRoomId, playerName: 'Bob' });
+        tttJoinResult.then((result) => {
+          expect(result).to.not.equal('timeout');
+          expect(result.text).to.include('Not found');
+          done();
         });
       });
     });
@@ -159,20 +161,30 @@ describe('Cross-Game Integration Tests', function () {
 
       const [bingoRoomId, tttRoomId] = await Promise.all([getBingoRoom, getTttRoom]);
 
-      const tttStateAfterBingo = new Promise((resolve) => {
+      const tttStateBefore = new Promise((resolve) => {
         player3.once('ttt_roomInfo', (room) => resolve(room));
       });
+      player3.emit('ttt_requestRoomInfo', tttRoomId);
+      const tttState1 = await tttStateBefore;
+      expect(tttState1.gameState).to.equal('playing');
 
       player1.emit('bingo_achieved', bingoRoomId);
-      const tttState = await tttStateAfterBingo;
 
-      expect(tttState.gameState).to.equal('playing');
-      expect(tttState.id).to.equal(tttRoomId);
+      await new Promise((r) => setTimeout(r, 100));
+
+      const tttStateAfter = new Promise((resolve) => {
+        player3.once('ttt_roomInfo', (room) => resolve(room));
+      });
+      player3.emit('ttt_requestRoomInfo', tttRoomId);
+      const tttState2 = await tttStateAfter;
+
+      expect(tttState2.gameState).to.equal('playing');
+      expect(tttState2.id).to.equal(tttRoomId);
     });
 
     it('DAB game over should not affect UTTT games', async () => {
       const getDabRoom = new Promise((resolve) => {
-        player1.emit('dab_createRoom', { mode: 'classic', customPlayers: 2, playerName: 'P1' });
+        player1.emit('dab_createRoom', { mode: 'custom', customRows: 2, customCols: 2, customPlayers: 2, playerName: 'P1' });
         player1.once('dab_roomInfo', (room) => {
           player2.emit('dab_joinRoom', { roomId: room.id, playerName: 'P2' });
           player2.once('dab_gameStarted', () => resolve(room.id));
@@ -189,14 +201,24 @@ describe('Cross-Game Integration Tests', function () {
 
       const [dabRoomId, utttRoomId] = await Promise.all([getDabRoom, getUtRoom]);
 
-      const utttStateAfterDab = new Promise((resolve) => {
+      const utttStateBefore = new Promise((resolve) => {
         player3.once('uttt_roomInfo', (room) => resolve(room));
       });
+      player3.emit('uttt_requestRoomInfo', utttRoomId);
+      const utttState1 = await utttStateBefore;
+      expect(utttState1.id).to.equal(utttRoomId);
 
-      player3.emit('dab_leaveRoom', dabRoomId);
-      const utttState = await utttStateAfterDab;
+      player1.emit('dab_leaveRoom', dabRoomId);
 
-      expect(utttState.id).to.equal(utttRoomId);
+      await new Promise((r) => setTimeout(r, 100));
+
+      const utttStateAfter = new Promise((resolve) => {
+        player3.once('uttt_roomInfo', (room) => resolve(room));
+      });
+      player3.emit('uttt_requestRoomInfo', utttRoomId);
+      const utttState2 = await utttStateAfter;
+
+      expect(utttState2.id).to.equal(utttRoomId);
     });
   });
 
@@ -313,15 +335,25 @@ describe('Cross-Game Integration Tests', function () {
 
       const [bingoRoomId, tttRoomId] = await Promise.all([bingoRoom, tttRoom]);
 
-      const bingoStateAfterTttRestart = new Promise((resolve) => {
+      const bingoStateBefore = new Promise((resolve) => {
         player1.once('bingo_roomInfo', (room) => resolve(room));
       });
+      player1.emit('bingo_requestRoomInfo', bingoRoomId);
+      const bingoState1 = await bingoStateBefore;
+      expect(bingoState1.gameState).to.equal('playing');
 
       player3.emit('ttt_restartGame', tttRoomId);
-      const bingoState = await bingoStateAfterTttRestart;
 
-      expect(bingoState.id).to.equal(bingoRoomId);
-      expect(bingoState.gameState).to.equal('playing');
+      await new Promise((r) => setTimeout(r, 100));
+
+      const bingoStateAfter = new Promise((resolve) => {
+        player1.once('bingo_roomInfo', (room) => resolve(room));
+      });
+      player1.emit('bingo_requestRoomInfo', bingoRoomId);
+      const bingoState2 = await bingoStateAfter;
+
+      expect(bingoState2.id).to.equal(bingoRoomId);
+      expect(bingoState2.gameState).to.equal('playing');
     });
   });
 });

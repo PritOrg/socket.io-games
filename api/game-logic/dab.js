@@ -7,16 +7,20 @@ class DabManager extends BaseManager {
   }
 
   handleConnection(socket) {
-    socket.on("dab_createRoom", (data) => this.createRoom(socket, data));
-    socket.on("dab_joinRoom", (data) => this.joinRoom(socket, data));
-    socket.on("dab_reconnect", (data) => this.reconnect(socket, data));
-    socket.on("dab_leaveRoom", (roomId) => this.leaveRoom(socket, roomId));
-    socket.on("dab_makeMove", (data) => this.makeMove(socket, data));
-    socket.on("dab_requestRedo", (roomId) => this.requestRedo(socket, roomId));
-    socket.on("dab_respondRedo", (data) => this.respondRedo(socket, data));
-    socket.on("dab_restartGame", (roomId) => this.restartGame(socket, roomId));
-    socket.on("dab_startGame", (data) => this.startGame(socket, data));
-    socket.on("disconnect", () => this.handleDisconnect(socket));
+    socket.on(`${this.gamePrefix}_createRoom`, (data) => this.createRoom(socket, data));
+    socket.on(`${this.gamePrefix}_joinRoom`, (data) => this.joinRoom(socket, data));
+    socket.on(`${this.gamePrefix}_reconnect`, (data) => this.reconnect(socket, data));
+    socket.on(`${this.gamePrefix}_leaveRoom`, (roomId) => this.leaveRoom(socket, roomId));
+    socket.on(`${this.gamePrefix}_makeMove`, (data) => this.makeMove(socket, data));
+    socket.on(`${this.gamePrefix}_requestRedo`, (roomId) => this.requestRedo(socket, roomId));
+    socket.on(`${this.gamePrefix}_respondRedo`, (data) => this.respondRedo(socket, data));
+    socket.on(`${this.gamePrefix}_restartGame`, (roomId) => this.restartGame(socket, roomId));
+    socket.on(`${this.gamePrefix}_startGame`, (data) => this.startGame(socket, data));
+    socket.on(`${this.gamePrefix}_requestRoomInfo`, (roomId) => {
+      const sanitized = this.sanitizeRoomId(roomId);
+      if (sanitized) this.sendRoomInfo(sanitized);
+    });
+    socket.on('disconnect', () => this.handleDisconnect(socket));
   }
 
   createRoom(
@@ -84,30 +88,22 @@ class DabManager extends BaseManager {
   }
 
   joinRoom(socket, { roomId, playerName }) {
-    const roomIdSanitized = this.sanitizeRoomId(roomId);
-    const room = this.rooms.get(roomIdSanitized);
-    if (!room) {
-      socket.emit(`${this.gamePrefix}_alert`, {
-        icon: "error",
-        title: "Error",
-        text: "Room not found",
-      });
+    const sanitizedRoomId = this.sanitizeRoomId(roomId);
+    if (!sanitizedRoomId) {
+      socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Error', text: 'Invalid room ID' });
       return;
     }
-    if (room.gameState !== "waiting") {
-      socket.emit(`${this.gamePrefix}_alert`, {
-        icon: "error",
-        title: "Error",
-        text: "Game already in progress",
-      });
+    const room = this.rooms.get(sanitizedRoomId);
+    if (!room) {
+      socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Error', text: 'Room not found' });
+      return;
+    }
+    if (room.gameState !== 'waiting') {
+      socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Error', text: 'Game already in progress' });
       return;
     }
     if (room.players.length >= room.maxPlayers) {
-      socket.emit(`${this.gamePrefix}_alert`, {
-        icon: "error",
-        title: "Error",
-        text: "Room is full",
-      });
+      socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Error', text: 'Room is full' });
       return;
     }
 
@@ -115,21 +111,17 @@ class DabManager extends BaseManager {
     room.players.push({ id: socket.id, name: playerName, connected: true });
 
     if (room.players.length >= room.maxPlayers) {
-      room.gameState = "playing";
+      room.gameState = 'playing';
       room.currentTurn = 0;
-      this.io
-        .to(room.id)
-        .emit(`${this.gamePrefix}_gameStarted`, {
-          firstTurn: room.players[0].id,
-        });
+      this.io.to(room.id).emit(`${this.gamePrefix}_gameStarted`, { firstTurn: room.players[0].id });
     }
 
     this.sendRoomInfo(room.id);
   }
 
   leaveRoom(socket, roomId) {
-    const roomIdSanitized = this.sanitizeRoomId(roomId);
-    const room = this.rooms.get(roomIdSanitized);
+    const sanitizedRoomId = this.sanitizeRoomId(roomId);
+    const room = this.rooms.get(sanitizedRoomId);
     if (!room) return;
 
     const playerIndex = room.players.findIndex((p) => p.id === socket.id);
@@ -141,8 +133,8 @@ class DabManager extends BaseManager {
       const activeCount = room.players.filter((p) => p.connected).length;
 
       if (activeCount === 0) {
-        this.registerEmptyTimer(roomId, () => {
-          this.rooms.delete(roomId);
+        this.registerEmptyTimer(sanitizedRoomId, () => {
+          this.rooms.delete(sanitizedRoomId);
         });
       } else if (activeCount === 1) {
         const canContinue = room.startedWithPlayers >= 4;
@@ -150,9 +142,7 @@ class DabManager extends BaseManager {
           room.gameState = "paused";
           this.io
             .to(room.id)
-            .emit(`${this.gamePrefix}_gamePaused`, {
-              reason: "Opponent disconnected",
-            });
+            .emit(`${this.gamePrefix}_gamePaused`, { reason: "Opponent disconnected" });
         }
       }
 
@@ -164,39 +154,36 @@ class DabManager extends BaseManager {
   }
 
   restartGame(socket, roomId) {
-    const room = this.rooms.get(roomId);
+    const sanitizedRoomId = this.sanitizeRoomId(roomId);
+    const room = this.rooms.get(sanitizedRoomId);
     if (!room) return;
     if (room.creator !== socket.id) return;
 
     room.gameState = "waiting";
     room.currentTurn = 0;
-    room.horizontalLines = Array(room.rows + 1)
-      .fill(null)
-      .map(() => Array(room.cols).fill(null));
-    room.verticalLines = Array(room.rows)
-      .fill(null)
-      .map(() => Array(room.cols + 1).fill(null));
-    room.boxes = Array(room.rows)
-      .fill(null)
-      .map(() => Array(room.cols).fill(null));
-    room.scores = Array(room.maxPlayers).fill(0);
+    room.horizontalLines = Array(room.rows + 1).fill(null).map(() => Array(room.cols).fill(null));
+    room.verticalLines = Array(room.rows).fill(null).map(() => Array(room.cols + 1).fill(null));
+    room.boxes = Array(room.rows).fill(null).map(() => Array(room.cols).fill(null));
+    room.scores = Array(room.players.length).fill(0);
     room.lastMove = null;
     room.redoRequest = null;
-    room.lastClaimedBox = null;
     room.gameState = "waiting";
 
-    this.io.to(room.id).emit("dab_gameRestarted");
+    this.io.to(room.id).emit(`${this.gamePrefix}_gameRestarted`);
     this.sendRoomInfo(room.id);
   }
 
   startGame(socket, { roomId }) {
-    const room = this.rooms.get(roomId);
+    const sanitizedRoomId = this.sanitizeRoomId(roomId);
+    const room = this.rooms.get(sanitizedRoomId);
     if (!room || room.creator !== socket.id) return;
+
     room.gameState = "playing";
+    room.currentTurn = 0;
     this.io
-      .to(roomId)
-      .emit("dab_gameStarted", { firstTurn: room.players[0].id });
-    this.sendRoomInfo(roomId);
+      .to(sanitizedRoomId)
+      .emit(`${this.gamePrefix}_gameStarted`, { firstTurn: room.players[0].id });
+    this.sendRoomInfo(sanitizedRoomId);
   }
 
   requestRedo(socket, roomId) {
@@ -315,8 +302,9 @@ class DabManager extends BaseManager {
   }
 
   requestRedo(socket, roomId) {
-    const room = this.rooms.get(roomId?.toUpperCase());
-    if (!room || room.gameState !== "playing") return;
+    const sanitizedRoomId = this.sanitizeRoomId(roomId);
+    const room = this.rooms.get(sanitizedRoomId);
+    if (!room || room.gameState !== 'playing') return;
     if (room.lastMove === null) return;
 
     const playerIndex = room.players.findIndex((p) => p.id === socket.id);
@@ -324,23 +312,14 @@ class DabManager extends BaseManager {
 
     const immediatePlayerIndex = room.currentTurn;
     if (playerIndex !== immediatePlayerIndex) {
-      socket.emit("dab_alert", {
-        icon: "error",
-        title: "Not Allowed",
-        text: "Only the player who just moved can request a redo.",
-      });
+      socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Not Allowed', text: 'Only the player who just moved can request a redo.' });
       return;
     }
 
-    const prevPlayerIndex =
-      (playerIndex + room.players.length - 1) % room.players.length;
+    const prevPlayerIndex = (playerIndex + room.players.length - 1) % room.players.length;
     const prevPlayer = room.players[prevPlayerIndex];
     if (!prevPlayer || !prevPlayer.connected) {
-      socket.emit("dab_alert", {
-        icon: "error",
-        title: "Error",
-        text: "Previous player not connected.",
-      });
+      socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Error', text: 'Previous player not connected.' });
       return;
     }
 
@@ -349,9 +328,10 @@ class DabManager extends BaseManager {
       requesterIndex: playerIndex,
       targetId: prevPlayer.id,
       targetIndex: prevPlayerIndex,
+      lastMove: room.lastMove,
     };
 
-    this.io.to(room.id).emit("dab_redoRequest", {
+    this.io.to(room.id).emit(`${this.gamePrefix}_redoRequest`, {
       requesterId: socket.id,
       requesterName: room.players[playerIndex].name,
       targetId: prevPlayer.id,
@@ -359,33 +339,25 @@ class DabManager extends BaseManager {
   }
 
   respondRedo(socket, { roomId, accept }) {
-    const room = this.rooms.get(roomId?.toUpperCase());
-    if (!room || room.gameState !== "playing" || !room.redoRequest) return;
+    const sanitizedRoomId = this.sanitizeRoomId(roomId);
+    const room = this.rooms.get(sanitizedRoomId);
+    if (!room || room.gameState !== 'playing' || !room.redoRequest) return;
 
     if (socket.id !== room.redoRequest.targetId) {
-      socket.emit("dab_alert", {
-        icon: "error",
-        title: "Not Allowed",
-        text: "Only the immediate player can respond to this redo request.",
-      });
+      socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Not Allowed', text: 'Only the immediate player can respond to this redo request.' });
       return;
     }
 
     const requester = room.players[room.redoRequest.requesterIndex];
     if (!requester || !requester.connected) {
       room.redoRequest = null;
-      this.io
-        .to(room.id)
-        .emit("dab_redoResponse", {
-          accepted: false,
-          reason: "Requester disconnected.",
-        });
+      this.io.to(room.id).emit(`${this.gamePrefix}_redoResponse`, { accepted: false, reason: 'Requester disconnected.' });
       return;
     }
 
     if (accept) {
       const { lineType, r, c } = room.redoRequest.lastMove;
-      if (lineType === "h") {
+      if (lineType === 'h') {
         room.horizontalLines[r][c] = null;
       } else {
         room.verticalLines[r][c] = null;
@@ -400,7 +372,7 @@ class DabManager extends BaseManager {
       room.lastMove = null;
       room.currentTurn = room.redoRequest.targetIndex;
 
-      this.io.to(room.id).emit("dab_redoAccepted", {
+      this.io.to(room.id).emit(`${this.gamePrefix}_redoAccepted`, {
         lineType,
         r,
         c,
@@ -409,7 +381,7 @@ class DabManager extends BaseManager {
         currentTurn: room.currentTurn,
       });
     } else {
-      this.io.to(room.id).emit("dab_redoResponse", {
+      this.io.to(room.id).emit(`${this.gamePrefix}_redoResponse`, {
         accepted: false,
         requesterId: room.redoRequest.requesterId,
         requesterName: room.redoRequest.requesterName,
@@ -421,24 +393,16 @@ class DabManager extends BaseManager {
   }
 
   reconnect(socket, { roomId, playerId }) {
-    const roomIdSanitized = this.sanitizeRoomId(roomId);
-    const room = this.rooms.get(roomIdSanitized);
+    const sanitizedRoomId = this.sanitizeRoomId(roomId);
+    const room = this.rooms.get(sanitizedRoomId);
     if (!room) {
-      socket.emit(`${this.gamePrefix}_alert`, {
-        icon: "error",
-        title: "Error",
-        text: "Room not found",
-      });
+      socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Error', text: 'Room not found' });
       return;
     }
 
     const player = room.players.find((p) => p.id === playerId);
     if (!player) {
-      socket.emit(`${this.gamePrefix}_alert`, {
-        icon: "error",
-        title: "Error",
-        text: "Player not found in room",
-      });
+      socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Error', text: 'Player not found in room' });
       return;
     }
 
@@ -446,18 +410,20 @@ class DabManager extends BaseManager {
     player.id = socket.id;
     player.connected = true;
 
-    this.clearTimer(`empty_${roomId}`);
+    this.clearTimer(`empty_${sanitizedRoomId}`);
 
     if (room.gameState === "paused") {
       const activeCount = room.players.filter((p) => p.connected).length;
       if (activeCount >= 2) {
         room.gameState = "playing";
-        this.clearTimer(`forfeit_${roomId}`);
-        this.io.to(room.id).emit(`${this.gamePrefix}_alert`, {
-          icon: "success",
-          title: "Player Reconnected",
-          text: "Game resumed!",
-        });
+        this.clearTimer(`forfeit_${sanitizedRoomId}`);
+        this.io
+          .to(room.id)
+          .emit(`${this.gamePrefix}_alert`, {
+            icon: "success",
+            title: "Player Reconnected",
+            text: "Game resumed!",
+          });
       }
     }
 
@@ -610,6 +576,60 @@ class DabManager extends BaseManager {
     }
 
     this.clearTimer(`forfeit_${room.id}`);
+  }
+
+  handleDisconnect(socket) {
+    for (const [roomId, room] of this.rooms.entries()) {
+      const playerIndex = room.players.findIndex((p) => p.id === socket.id);
+      if (playerIndex === -1) continue;
+
+      room.players[playerIndex].connected = false;
+
+      if (room.gameState === "playing") {
+        const activeCount = room.players.filter((p) => p.connected).length;
+
+        if (activeCount === 0) {
+          this.registerEmptyTimer(roomId, () => {
+            this.rooms.delete(roomId);
+          });
+        } else if (activeCount === 1) {
+          const canContinue = room.startedWithPlayers >= 4;
+          if (canContinue) {
+            this.io.to(roomId).emit(`${this.gamePrefix}_gamePaused`, { reason: "Only one player remaining - game continues!" });
+          } else {
+            room.gameState = "paused";
+            this.io.to(roomId).emit(`${this.gamePrefix}_gamePaused`, { reason: "Opponent disconnected" });
+
+            // Forfeit timer
+            this.registerEmptyTimer(roomId, () => {
+              if (room.gameState === "paused") {
+                const remainingPlayer = room.players.find((p) => p.connected);
+                if (remainingPlayer) {
+                  const remainingIndex = room.players.indexOf(remainingPlayer);
+                  room.scores[remainingIndex] += room.rows * room.cols - room.scores.reduce((sum, s) => sum + s, 0);
+                }
+                this.emitGameOver(room);
+              }
+            });
+          }
+        } else {
+          if (room.currentTurn === playerIndex) {
+            room.currentTurn = this.getNextTurn(room);
+          }
+        }
+
+        this.io.to(roomId).emit(`${this.gamePrefix}_playerLeft`, { playerId: socket.id });
+        this.sendRoomInfo(roomId);
+      }
+    }
+  }
+
+  sendRoomInfo(roomId) {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+
+    const { emptyTimer, forfeitTimer, ...sanitized } = room;
+    this.io.to(roomId).emit(`${this.gamePrefix}_roomInfo`, sanitized);
   }
 
   handleDisconnect(socket) {

@@ -6,3 +6,8 @@ export { default as ModeSelector } from './ModeSelector';
 export { default as LeaveButton } from './LeaveButton';
 export { default as RoomLobby } from './RoomLobby';
 export { sketchPopupClass } from './SketchPopup';
+export { default as GameLayout } from './GameLayout';
+export { default as TurnIndicator } from './TurnIndicator';
+export { default as MatchReport } from './MatchReport';
+export { default as AvatarSelector } from './AvatarSelector';
+export { default as CountdownOverlay } from './CountdownOverlay';

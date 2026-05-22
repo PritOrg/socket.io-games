@@ -146,6 +146,23 @@
   75% { transform: rotate(-0.5deg) translateY(1px); }
 }
 
+@keyframes wiggle {
+  0%, 100% { transform: rotate(-1deg); }
+  50% { transform: rotate(1deg); }
+}
+
+@keyframes pencil-scribble {
+  0% { filter: brightness(1); }
+  50% { filter: brightness(1.2) contrast(1.1); }
+  100% { filter: brightness(1); }
+}
+
+@keyframes screen-shake {
+  0%, 100% { transform: translate(0); }
+  25% { transform: translate(-2px, 2px); }
+  75% { transform: translate(2px, -2px); }
+}
+
 .glass {
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(10px);

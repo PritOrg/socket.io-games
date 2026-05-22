@@ -46,6 +46,34 @@ io.on('connection', (socket) => {
   });
 });
 
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime() });
+});
+
+app.get('/stats', (req, res) => {
+  res.json({
+    bingo: { rooms: bingoManager.rooms.size },
+    tictactoe: { rooms: tictactoeManager.rooms.size },
+    uttt: { rooms: utttManager.rooms.size },
+    dab: { rooms: dabManager.rooms.size },
+    connections: io.engine.clientsCount,
+  });
+});
+
+app.post('/cleanup', (req, res) => {
+  let cleaned = 0;
+  for (const manager of [bingoManager, tictactoeManager, utttManager, dabManager]) {
+    for (const [id, room] of manager.rooms) {
+      const allGone = room.players.every((p) => !p.connected);
+      if (allGone) {
+        manager.rooms.delete(id);
+        cleaned++;
+      }
+    }
+  }
+  res.json({ cleaned });
+});
+
 if (process.env.NODE_ENV !== 'test') {
   server.listen(PORT, HOST, () => {
     logger.success('SERVER', `Unified Optimized Server running on port ${PORT}`);

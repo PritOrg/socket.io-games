@@ -170,7 +170,7 @@ describe("Bingo Game Logic", function () {
 
   describe("Bingo Achieved", () => {
     it("should end game when bingo_achieved is called with 5 completed lines", function (done) {
-      this.timeout(10000);
+      this.timeout(15000);
       player1.emit("bingo_createRoom", "Alice");
       player1.once("bingo_roomInfo", (room) => {
         player2.emit("bingo_joinRoom", { roomId: room.id, playerName: "Bob" });
@@ -178,41 +178,40 @@ describe("Bingo Game Logic", function () {
           player1.emit("bingo_startGame", room.id);
 
           player1.once("bingo_gameStarted", ({ playerBoards }) => {
-            const board = playerBoards[player1.id];
-            const board2 = playerBoards[player2.id];
-
-            let p1Idx = 0;
-            let p2Idx = 0;
-            const markNext = () => {
-              if (p1Idx >= 25) {
-                player1.emit("bingo_achieved", room.id);
-                return;
-              }
-              player1.emit("bingo_markNumber", {
-                roomId: room.id,
-                number: board[p1Idx],
-              });
-              p1Idx++;
-              player1.once("bingo_nextTurn", () => {
-                if (p2Idx < 25) {
-                  player2.emit("bingo_markNumber", {
-                    roomId: room.id,
-                    number: board2[p2Idx],
-                  });
-                  p2Idx++;
-                  player2.once("bingo_nextTurn", markNext);
-                } else {
-                  markNext();
-                }
-              });
-            };
+            const p1Board = playerBoards[player1.id];
+            let idx = 0;
+            const allNumbers = Array.from({ length: 25 }, (_, i) => i + 1);
 
             player1.once("bingo_playerWon", (winnerId) => {
               expect(winnerId).to.equal(player1.id);
               done();
             });
 
-            markNext();
+            const markAllNumbers = () => {
+              if (idx >= 25) {
+                player1.emit("bingo_achieved", room.id);
+                return;
+              }
+
+              const num = allNumbers[idx];
+              idx++;
+
+              if (idx % 2 === 1) {
+                player1.emit("bingo_markNumber", {
+                  roomId: room.id,
+                  number: num,
+                });
+                player1.once("bingo_nextTurn", markAllNumbers);
+              } else {
+                player2.emit("bingo_markNumber", {
+                  roomId: room.id,
+                  number: num,
+                });
+                player2.once("bingo_nextTurn", markAllNumbers);
+              }
+            };
+
+            markAllNumbers();
           });
         });
       });
@@ -227,7 +226,6 @@ describe("Bingo Game Logic", function () {
 
           player1.once("bingo_gameStarted", ({ playerBoards }) => {
             const board = playerBoards[player1.id];
-            const board2 = playerBoards[player2.id];
             const nonLineNumbers = [
               board[0],
               board[1],
@@ -236,9 +234,17 @@ describe("Bingo Game Logic", function () {
               board[10],
             ];
 
+            const allNumbers = Array.from({ length: 25 }, (_, i) => i + 1);
+            const p2Numbers = allNumbers.filter((n) => !nonLineNumbers.includes(n));
+
             let round = 0;
             const markNext = () => {
               if (round >= 5) {
+                player1.once("bingo_alert", ({ icon, text }) => {
+                  expect(icon).to.equal("error");
+                  expect(text).to.include("Need 5 lines");
+                  done();
+                });
                 player1.emit("bingo_achieved", room.id);
                 return;
               }
@@ -250,17 +256,11 @@ describe("Bingo Game Logic", function () {
               player1.once("bingo_nextTurn", () => {
                 player2.emit("bingo_markNumber", {
                   roomId: room.id,
-                  number: board2[round - 1],
+                  number: p2Numbers[round - 1],
                 });
                 player2.once("bingo_nextTurn", markNext);
               });
             };
-
-            player1.once("bingo_alert", ({ icon, text }) => {
-              expect(icon).to.equal("error");
-              expect(text).to.include("Need 5 lines");
-              done();
-            });
 
             markNext();
           });

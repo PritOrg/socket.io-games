@@ -51,18 +51,18 @@ describe('Bingo', () => {
       });
     });
 
-    // Our Bingo cells are buttons.
-    // There are 25 cells + navigation buttons.
-    const cells = screen.getAllByRole('button');
-    
-    // Find a cell with a number (not navigation)
-    const gameCell = cells.find(c => !isNaN(parseInt(c.textContent)));
-    if (!gameCell) throw new Error('Bingo cell not found');
+    // Find Bingo number cells - they're buttons with numeric text content
+    const allButtons = screen.getAllByRole('button');
+    const numberCell = allButtons.find(c => {
+      const n = parseInt(c.textContent);
+      return n >= 1 && n <= 25;
+    });
+    if (!numberCell) throw new Error('Bingo number cell not found');
 
-    const number = parseInt(gameCell.textContent);
+    const number = parseInt(numberCell.textContent);
 
     await act(async () => {
-      fireEvent.click(gameCell);
+      fireEvent.click(numberCell);
     });
 
     expect(mockSocket.emit).toHaveBeenCalledWith('bingo_markNumber', expect.objectContaining({

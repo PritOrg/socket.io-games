@@ -5,7 +5,9 @@ import {
   SketchCard,
   SketchBorder,
   sketchPopupClass,
+  GameLayout,
 } from "../components/ui";
+import useGameHandlers from "../hooks/useGameHandlers";
 import useSound from "use-sound";
 import confetti from "canvas-confetti";
 import Swal from "sweetalert2";
@@ -343,14 +345,8 @@ const Bingo = () => {
   };
 
   return (
-    <div className="min-h-screen bg-paper flex flex-col items-center justify-center p-4">
-      <SketchButton
-        onClick={roomId ? handleLeaveRoom : () => navigate("/")}
-        className="absolute top-8 left-8 flex items-center gap-2"
-      >
-        <ArrowLeft size={18} />
-        Back
-      </SketchButton>
+    <GameLayout socket={socket} roomId={roomId} gamePrefix="bingo" players={players}>
+      <div className="flex flex-col items-center justify-center p-4 w-full">
 
       <h1 className="text-6xl font-sketch mb-8 text-ink">Bingo Party</h1>
 
@@ -465,13 +461,13 @@ const Bingo = () => {
             )}
 
             {(gameState === "ready" || gameState === "playing") && (
-              <RetroButton
+              <SketchButton
                 onClick={handleLeaveRoom}
                 variant="secondary"
                 className="w-full text-sm py-2 mt-2"
               >
                 Leave Room
-              </RetroButton>
+              </SketchButton>
             )}
 
             {gameState === "playing" && (
@@ -496,7 +492,8 @@ const Bingo = () => {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </GameLayout>
   );
 };
 

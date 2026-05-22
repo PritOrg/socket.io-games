@@ -9,47 +9,40 @@ class UTTTManager extends BaseManager {
 
   handleConnection(socket) {
     socket.on(`${this.gamePrefix}_createRoom`, (playerName) => {
-      logger.socket('IN', 'uttt_createRoom', socket.id, { playerName });
+      logger.socket('IN', `${this.gamePrefix}_createRoom`, socket.id, { playerName });
       this.createRoom(socket, playerName);
     });
 
     socket.on(`${this.gamePrefix}_joinRoom`, (data) => {
-      logger.socket('IN', 'uttt_joinRoom', socket.id, data);
+      logger.socket('IN', `${this.gamePrefix}_joinRoom`, socket.id, data);
       this.joinRoom(socket, data);
     });
 
     socket.on(`${this.gamePrefix}_makeMove`, (data) => {
-      logger.socket('IN', 'uttt_makeMove', socket.id, data);
+      logger.socket('IN', `${this.gamePrefix}_makeMove`, socket.id, data);
       this.makeMove(socket, data);
     });
 
     socket.on(`${this.gamePrefix}_restartGame`, (roomId) => {
-      logger.socket('IN', 'uttt_restartGame', socket.id, { roomId });
+      logger.socket('IN', `${this.gamePrefix}_restartGame`, socket.id, { roomId });
       this.restartGame(socket, roomId);
     });
 
-<<<<<<< Updated upstream
-    socket.on('uttt_leaveRoom', (roomId) => {
-=======
     socket.on(`${this.gamePrefix}_leaveRoom`, (roomId) => {
->>>>>>> Stashed changes
-      logger.socket('IN', 'uttt_leaveRoom', socket.id, { roomId });
+      logger.socket('IN', `${this.gamePrefix}_leaveRoom`, socket.id, { roomId });
       this.leaveRoom(socket, roomId);
     });
 
-<<<<<<< Updated upstream
-    socket.on('uttt_reconnect', (data) => {
-      logger.socket('IN', 'uttt_reconnect', socket.id, data);
-      this.reconnect(socket, data);
-    });
-    
-=======
     socket.on(`${this.gamePrefix}_reconnect`, (data) => {
-      logger.socket('IN', 'uttt_reconnect', socket.id, data);
+      logger.socket('IN', `${this.gamePrefix}_reconnect`, socket.id, data);
       this.reconnect(socket, data);
     });
 
->>>>>>> Stashed changes
+    socket.on(`${this.gamePrefix}_requestRoomInfo`, (roomId) => {
+      const sanitized = this.sanitizeRoomId(roomId);
+      if (sanitized) this.sendRoomInfo(sanitized);
+    });
+
     socket.on('disconnect', () => {
       logger.warn('UTTT', `Socket disconnected: ${socket.id}`);
       this.handleDisconnect(socket);
@@ -98,14 +91,8 @@ class UTTTManager extends BaseManager {
       macroBoard: Array(9).fill(null),
       activeGrid: null,
       scores: { X: 0, O: 0 },
-<<<<<<< Updated upstream
-      lastMove: null,
-      emptyTimer: null,
-      forfeitTimer: null
-=======
       wonGrids: new Set(),
       lastMove: null
->>>>>>> Stashed changes
     };
     this.rooms.set(roomId, room);
     logger.success('UTTT', `Room created: ${roomId} by ${playerName} (${socket.id})`);
@@ -132,7 +119,10 @@ class UTTTManager extends BaseManager {
     room.gameState = 'playing';
     room.currentTurn = room.players[0].id;
 
-    this.clearTimer(`empty_${roomId}`);
+    if (room.emptyTimer) {
+      this.clearTimer(`empty_${roomId}`);
+    }
+
     logger.success('UTTT', `Player ${playerName} (${socket.id}) joined room ${roomId}`);
     this.io.to(room.id).emit(`${this.gamePrefix}_gameStarted`);
     this.sendRoomInfo(roomId);
@@ -188,11 +178,7 @@ class UTTTManager extends BaseManager {
       return;
     }
     if (room.board[gridIndex][squareIndex] !== null) {
-<<<<<<< Updated upstream
-      socket.emit('uttt_error', { message: 'Square already occupied' });
-=======
       socket.emit(`${this.gamePrefix}_error`, { message: 'Square already occupied' });
->>>>>>> Stashed changes
       return;
     }
 
@@ -247,13 +233,9 @@ class UTTTManager extends BaseManager {
     }
 
     const nextGrid = squareIndex;
-<<<<<<< Updated upstream
-    if (room.macroBoard[nextGrid] === 'DEAD') {
-=======
     const isNextGridFull = room.board[nextGrid].every(cell => cell !== null);
 
     if (isNextGridFull) {
->>>>>>> Stashed changes
       room.activeGrid = null;
     } else {
       room.activeGrid = nextGrid;
@@ -266,151 +248,6 @@ class UTTTManager extends BaseManager {
     this.emitGameState(room.id);
   }
 
-  handleDisconnect(socket) {
-    for (const [roomId, room] of this.rooms.entries()) {
-      const playerIndex = room.players.findIndex(p => p.id === socket.id);
-      if (playerIndex === -1) continue;
-
-      room.players[playerIndex].connected = false;
-
-      if (room.gameState === 'playing') {
-        const activeCount = room.players.filter(p => p.connected).length;
-
-        if (activeCount === 0) {
-<<<<<<< Updated upstream
-          room.emptyTimer = setTimeout(() => {
-            this.rooms.delete(roomId);
-            logger.info('UTTT', `Room ${roomId} deleted (timeout)`);
-          }, 5 * 60 * 1000);
-        } else if (activeCount === 1) {
-          room.gameState = 'paused';
-          this.io.to(room.id).emit('uttt_gamePaused', { reason: 'Opponent disconnected' });
-        }
-
-        this.io.to(room.id).emit('uttt_playerLeft', { playerId: socket.id });
-=======
-          this.registerEmptyTimer(roomId, () => {
-            this.rooms.delete(roomId);
-            logger.info('UTTT', `Room ${roomId} deleted (empty)`);
-          });
-        } else if (activeCount === 1) {
-          room.gameState = 'paused';
-          this.io.to(room.id).emit(`${this.gamePrefix}_gamePaused`, { reason: 'Opponent disconnected' });
-        }
-
-        this.io.to(room.id).emit(`${this.gamePrefix}_playerLeft`, { playerId: socket.id });
->>>>>>> Stashed changes
-        this.sendRoomInfo(room.id);
-      }
-    }
-  }
-
-  leaveRoom(socket, roomId) {
-<<<<<<< Updated upstream
-    const room = this.rooms.get(roomId?.toUpperCase());
-=======
-    const roomIdSanitized = this.sanitizeRoomId(roomId);
-    const room = this.rooms.get(roomIdSanitized);
->>>>>>> Stashed changes
-    if (!room) return;
-
-    const playerIndex = room.players.findIndex(p => p.id === socket.id);
-    if (playerIndex === -1) return;
-
-    room.players[playerIndex].connected = false;
-
-    if (room.gameState === 'playing') {
-      const activeCount = room.players.filter(p => p.connected).length;
-
-      if (activeCount === 0) {
-<<<<<<< Updated upstream
-        room.emptyTimer = setTimeout(() => {
-          this.rooms.delete(roomId);
-        }, 5 * 60 * 1000);
-      } else if (activeCount === 1) {
-        room.gameState = 'paused';
-        this.io.to(room.id).emit('uttt_gamePaused', { reason: 'Opponent disconnected' });
-      }
-
-      this.io.to(room.id).emit('uttt_playerLeft', { playerId: socket.id });
-=======
-        this.registerEmptyTimer(roomId, () => {
-          this.rooms.delete(roomId);
-        });
-      } else if (activeCount === 1) {
-        room.gameState = 'paused';
-        this.io.to(room.id).emit(`${this.gamePrefix}_gamePaused`, { reason: 'Opponent disconnected' });
-      }
-
-      this.io.to(room.id).emit(`${this.gamePrefix}_playerLeft`, { playerId: socket.id });
->>>>>>> Stashed changes
-      this.sendRoomInfo(room.id);
-    }
-  }
-
-  reconnect(socket, { roomId, playerId }) {
-<<<<<<< Updated upstream
-    const room = this.rooms.get(roomId?.toUpperCase());
-    if (!room) {
-      socket.emit('uttt_error', { message: 'Room not found' });
-=======
-    const roomIdSanitized = this.sanitizeRoomId(roomId);
-    const room = this.rooms.get(roomIdSanitized);
-    if (!room) {
-      socket.emit(`${this.gamePrefix}_error`, { message: 'Room not found' });
->>>>>>> Stashed changes
-      return;
-    }
-
-    const player = room.players.find(p => p.id === playerId);
-    if (!player) {
-<<<<<<< Updated upstream
-      socket.emit('uttt_error', { message: 'Player not found in room' });
-=======
-      socket.emit(`${this.gamePrefix}_error`, { message: 'Player not found' });
->>>>>>> Stashed changes
-      return;
-    }
-
-    socket.join(room.id);
-    player.id = socket.id;
-    player.connected = true;
-
-<<<<<<< Updated upstream
-    if (room.emptyTimer) {
-      clearTimeout(room.emptyTimer);
-      room.emptyTimer = null;
-    }
-=======
-    this.clearTimer(`empty_${roomId}`);
->>>>>>> Stashed changes
-
-    if (room.gameState === 'paused') {
-      const activeCount = room.players.filter(p => p.connected).length;
-      if (activeCount >= 2) {
-        room.gameState = 'playing';
-<<<<<<< Updated upstream
-        if (room.forfeitTimer) {
-          clearTimeout(room.forfeitTimer);
-          room.forfeitTimer = null;
-        }
-        this.io.to(room.id).emit('uttt_alert', { icon: 'success', title: 'Player Reconnected', text: 'Game resumed!' });
-=======
-        this.clearTimer(`forfeit_${roomId}`);
-        this.io.to(room.id).emit(`${this.gamePrefix}_alert`, {
-          icon: 'success',
-          title: 'Player Reconnected',
-          text: 'Game resumed!'
-        });
->>>>>>> Stashed changes
-      }
-    }
-
-    this.sendRoomInfo(room.id);
-  }
-
-<<<<<<< Updated upstream
-=======
   emitGameState(roomId) {
     const room = this.rooms.get(roomId);
     if (!room) return;
@@ -429,7 +266,95 @@ class UTTTManager extends BaseManager {
     this.io.to(roomId).emit(`${this.gamePrefix}_gameState`, cleanRoom);
   }
 
->>>>>>> Stashed changes
+  handleDisconnect(socket) {
+    for (const [roomId, room] of this.rooms.entries()) {
+      const playerIndex = room.players.findIndex(p => p.id === socket.id);
+      if (playerIndex === -1) continue;
+
+      room.players[playerIndex].connected = false;
+
+      if (room.gameState === 'playing') {
+        const activeCount = room.players.filter(p => p.connected).length;
+
+        if (activeCount === 0) {
+          this.registerEmptyTimer(roomId, () => {
+            this.rooms.delete(roomId);
+            logger.info('UTTT', `Room ${roomId} deleted (empty)`);
+          });
+        } else if (activeCount === 1) {
+          room.gameState = 'paused';
+          this.io.to(room.id).emit(`${this.gamePrefix}_gamePaused`, { reason: 'Opponent disconnected' });
+        }
+
+        this.io.to(room.id).emit(`${this.gamePrefix}_playerLeft`, { playerId: socket.id });
+        this.sendRoomInfo(room.id);
+      }
+    }
+  }
+
+  leaveRoom(socket, roomId) {
+    const roomIdSanitized = this.sanitizeRoomId(roomId);
+    const room = this.rooms.get(roomIdSanitized);
+    if (!room) return;
+
+    const playerIndex = room.players.findIndex(p => p.id === socket.id);
+    if (playerIndex === -1) return;
+
+    room.players[playerIndex].connected = false;
+
+    if (room.gameState === 'playing') {
+      const activeCount = room.players.filter(p => p.connected).length;
+
+      if (activeCount === 0) {
+        this.registerEmptyTimer(roomId, () => {
+          this.rooms.delete(roomId);
+        });
+      } else if (activeCount === 1) {
+        room.gameState = 'paused';
+        this.io.to(room.id).emit(`${this.gamePrefix}_gamePaused`, { reason: 'Opponent disconnected' });
+      }
+
+      this.io.to(room.id).emit(`${this.gamePrefix}_playerLeft`, { playerId: socket.id });
+      this.sendRoomInfo(room.id);
+    }
+  }
+
+  reconnect(socket, { roomId, playerId }) {
+    const roomIdSanitized = this.sanitizeRoomId(roomId);
+    const room = this.rooms.get(roomIdSanitized);
+    if (!room) {
+      socket.emit(`${this.gamePrefix}_error`, { message: 'Room not found' });
+      return;
+    }
+
+    const player = room.players.find(p => p.id === playerId);
+    if (!player) {
+      socket.emit(`${this.gamePrefix}_error`, { message: 'Player not found' });
+      return;
+    }
+
+    socket.join(room.id);
+    player.id = socket.id;
+    player.connected = true;
+
+    this.clearTimer(`empty_${roomId}`);
+
+    if (room.gameState === 'paused') {
+      const activeCount = room.players.filter(p => p.connected).length;
+      if (activeCount >= 2) {
+        room.gameState = 'playing';
+        this.clearTimer(`forfeit_${roomId}`);
+        this.io.to(room.id).emit(`${this.gamePrefix}_alert`, {
+          icon: 'success',
+          title: 'Player Reconnected',
+          text: 'Game resumed!'
+        });
+      }
+    }
+
+    this.sendRoomInfo(room.id);
+  }
+
   sendRoomInfo(roomId) {
     const room = this.rooms.get(roomId);
     if (!room) return;

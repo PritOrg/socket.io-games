@@ -5,7 +5,9 @@ import {
   SketchCard,
   SketchBorder,
   sketchPopupClass,
+  GameLayout,
 } from "../components/ui";
+import useGameHandlers from "../hooks/useGameHandlers";
 import useSound from "use-sound";
 import confetti from "canvas-confetti";
 import Swal from "sweetalert2";
@@ -279,14 +281,8 @@ const TicTacToe = () => {
   );
 
   return (
-    <div className="min-h-screen bg-paper flex flex-col items-center justify-center p-2 sm:p-4">
-      <SketchButton
-        onClick={roomId ? handleLeaveRoom : () => navigate("/")}
-        className="absolute top-2 sm:top-8 left-2 sm:left-8 flex items-center gap-1 sm:gap-2 text-xs sm:text-base px-2 sm:px-4"
-      >
-        <ArrowLeft size={14} className="sm:w-[18px]" />
-        <span className="hidden sm:inline">Back</span>
-      </SketchButton>
+    <GameLayout socket={socket} roomId={roomId} gamePrefix="ttt" players={players}>
+      <div className="flex flex-col items-center justify-center p-2 sm:p-4 w-full">
 
       <h1 className="text-3xl sm:text-5xl md:text-6xl font-sketch mb-4 sm:mb-8 text-ink">
         Tic Tac Toe
@@ -396,7 +392,8 @@ const TicTacToe = () => {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </GameLayout>
   );
 };
 

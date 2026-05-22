@@ -15,6 +15,10 @@ class TicTacToeManager extends BaseManager {
     socket.on("ttt_restartGame", (roomId) => this.restartGame(socket, roomId));
     socket.on("ttt_leaveRoom", (roomId) => this.leaveRoom(socket, roomId));
     socket.on("ttt_reconnect", (data) => this.reconnect(socket, data));
+    socket.on("ttt_requestRoomInfo", (roomId) => {
+      const sanitized = this.sanitizeRoomId(roomId);
+      if (sanitized) this.sendRoomInfo(sanitized);
+    });
     socket.on("disconnect", () => this.handleDisconnect(socket));
   }
 
@@ -76,6 +80,33 @@ class TicTacToeManager extends BaseManager {
     this.sendRoomInfo(room.id);
   }
 
+  makeMove(socket, { roomId, position }) {
+    const sanitizedRoomId = this.sanitizeRoomId(roomId);
+    const room = this.rooms.get(sanitizedRoomId);
+    if (!room || room.gameState !== 'playing' || room.currentTurn !== socket.id) return;
+
+    const playerIndex = room.players.findIndex((p) => p.id === socket.id);
+    const symbol = playerIndex === 0 ? 'X' : 'O';
+
+    if (room.board[position] === null) {
+      room.board[position] = symbol;
+      this.io.to(sanitizedRoomId).emit(`${this.gamePrefix}_moveMade`, { position, symbol, board: room.board });
+
+      const result = this.checkWinner(room.board);
+      if (result) {
+        room.gameState = 'ended';
+        if (result.draw) {
+          this.io.to(sanitizedRoomId).emit(`${this.gamePrefix}_gameDraw`);
+        } else {
+          this.io.to(sanitizedRoomId).emit(`${this.gamePrefix}_gameWon`, { winner: socket.id, winningLine: result.line });
+        }
+      } else {
+        room.currentTurn = room.players.find((p) => p.id !== socket.id).id;
+        this.io.to(sanitizedRoomId).emit(`${this.gamePrefix}_nextTurn`, room.currentTurn);
+      }
+    }
+  }
+
   restartGame(socket, roomId) {
     const roomIdSanitized = this.sanitizeRoomId(roomId);
     const room = this.rooms.get(roomIdSanitized);
@@ -83,8 +114,8 @@ class TicTacToeManager extends BaseManager {
     room.board = Array(9).fill(null);
     room.gameState = "playing";
     room.currentTurn = room.players[0].id;
-    this.io.to(roomId).emit(`${this.gamePrefix}_gameRestarted`);
-    this.sendRoomInfo(roomId);
+    this.io.to(roomIdSanitized).emit(`${this.gamePrefix}_gameRestarted`);
+    this.sendRoomInfo(roomIdSanitized);
   }
 
   leaveRoom(socket, roomId) {
@@ -101,8 +132,8 @@ class TicTacToeManager extends BaseManager {
       const activeCount = room.players.filter((p) => p.connected).length;
 
       if (activeCount === 0) {
-        this.registerEmptyTimer(roomId, () => {
-          this.rooms.delete(roomId);
+        this.registerEmptyTimer(roomIdSanitized, () => {
+          this.rooms.delete(roomIdSanitized);
         });
       } else if (activeCount === 1) {
         room.gameState = "paused";
@@ -124,21 +155,13 @@ class TicTacToeManager extends BaseManager {
     const roomIdSanitized = this.sanitizeRoomId(roomId);
     const room = this.rooms.get(roomIdSanitized);
     if (!room) {
-      socket.emit(`${this.gamePrefix}_alert`, {
-        icon: "error",
-        title: "Error",
-        text: "Room not found",
-      });
+      socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Error', text: 'Room not found' });
       return;
     }
 
     const player = room.players.find((p) => p.id === playerId);
     if (!player) {
-      socket.emit(`${this.gamePrefix}_alert`, {
-        icon: "error",
-        title: "Error",
-        text: "Player not found in room",
-      });
+      socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Error', text: 'Player not found in room' });
       return;
     }
 
@@ -146,13 +169,13 @@ class TicTacToeManager extends BaseManager {
     player.id = socket.id;
     player.connected = true;
 
-    this.clearTimer(`empty_${roomId}`);
+    this.clearTimer(`empty_${roomIdSanitized}`);
 
     if (room.gameState === "paused") {
       const activeCount = room.players.filter((p) => p.connected).length;
       if (activeCount >= 2) {
         room.gameState = "playing";
-        this.clearTimer(`forfeit_${roomId}`);
+        this.clearTimer(`forfeit_${roomIdSanitized}`);
         this.io
           .to(room.id)
           .emit(`${this.gamePrefix}_alert`, {
