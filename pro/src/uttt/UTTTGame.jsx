@@ -1,36 +1,22 @@
-import React, { useState, useEffect } from "react";
-import { useGameContext } from "../context/GameContext";
-import {
-  SketchButton,
-  SketchCard,
-  SketchBorder,
-  sketchPopupClass,
-  GameLayout,
-} from "../components/ui";
-import useGameHandlers from "../hooks/useGameHandlers";
-import useSound from "use-sound";
-import confetti from "canvas-confetti";
-import Swal from "sweetalert2";
-import { useNavigate } from "react-router-dom";
-import {
-  ArrowLeft,
-  Users,
-  Trophy,
-  Grid3X3,
-  Star,
-  Sparkles,
-} from "lucide-react";
-import MacroGrid from "./components/MacroGrid";
-import logger from "../utils/logger";
+import React, { useState, useEffect } from 'react';
+import { useGameContext } from '../context/GameContext';
+import { SketchButton, SketchCard, SketchBorder, sketchPopupClass, GameLayout } from '../components/ui';
+import useGameHandlers from '../hooks/useGameHandlers';
+import useSound from 'use-sound';
+import confetti from 'canvas-confetti';
+import Swal from 'sweetalert2';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, Users, Trophy, Grid3X3, Star, Sparkles } from 'lucide-react';
+import MacroGrid from './components/MacroGrid';
+import logger from '../utils/logger';
 
-const PLAYER_COLORS = ["#1a1a2e", "#c73e1d"];
+const PLAYER_COLORS = ['#1a1a2e', '#c73e1d'];
 
 const UTTTGame = () => {
-  const { socket, playerName, roomId, setRoomId, clearRoomId } =
-    useGameContext();
+  const { socket, playerName, roomId, setRoomId, clearRoomId } = useGameContext();
   const [players, setPlayers] = useState([]);
   const [currentTurn, setCurrentTurn] = useState(null);
-  const [gameState, setGameState] = useState("waiting");
+  const [gameState, setGameState] = useState('waiting');
   const [board, setBoard] = useState(
     Array(9)
       .fill(null)
@@ -45,23 +31,23 @@ const UTTTGame = () => {
   const [isPaused, setIsPaused] = useState(false);
   const navigate = useNavigate();
 
-  const [playMove] = useSound("/sounds/move.mp3", { volume: 0.5 });
-  const [playWin] = useSound("/sounds/win.mp3", { volume: 0.7 });
+  const [playMove] = useSound('/sounds/move.mp3', { volume: 0.5 });
+  const [playWin] = useSound('/sounds/win.mp3', { volume: 0.7 });
 
   useEffect(() => {
     if (!socket) return;
 
-    logger.info("UTTT", `Socket connected: ${socket.id}`);
+    logger.info('UTTT', `Socket connected: ${socket.id}`);
 
-    const saved = sessionStorage.getItem("uttt_reconnect");
+    const saved = sessionStorage.getItem('uttt_reconnect');
     if (saved && !roomId) {
       const { roomId: savedRoomId, playerId } = JSON.parse(saved);
-      logger.socket("➡️", "uttt_reconnect", { roomId: savedRoomId, playerId });
-      socket.emit("uttt_reconnect", { roomId: savedRoomId, playerId });
+      logger.socket('➡️', 'uttt_reconnect', { roomId: savedRoomId, playerId });
+      socket.emit('uttt_reconnect', { roomId: savedRoomId, playerId });
     }
 
-    socket.on("uttt_roomInfo", (room) => {
-      logger.socket("⬅️", "uttt_roomInfo", {
+    socket.on('uttt_roomInfo', (room) => {
+      logger.socket('⬅️', 'uttt_roomInfo', {
         roomId: room.id,
         gameState: room.gameState,
       });
@@ -77,10 +63,10 @@ const UTTTGame = () => {
 
       const playerIndex = room.players.findIndex((p) => p.id === socket.id);
       if (playerIndex !== -1) {
-        setMySymbol(playerIndex === 0 ? "X" : "O");
+        setMySymbol(playerIndex === 0 ? 'X' : 'O');
         setMyPlayerIndex(playerIndex);
         sessionStorage.setItem(
-          "uttt_reconnect",
+          'uttt_reconnect',
           JSON.stringify({
             roomId: room.id,
             playerId: room.players[playerIndex].id,
@@ -89,19 +75,19 @@ const UTTTGame = () => {
       }
     });
 
-    socket.on("uttt_gamePaused", ({ reason }) => {
-      logger.socket("⬅️", "uttt_gamePaused", { reason });
+    socket.on('uttt_gamePaused', ({ reason }) => {
+      logger.socket('⬅️', 'uttt_gamePaused', { reason });
       setIsPaused(true);
       Swal.fire({
-        title: "Game Paused",
+        title: 'Game Paused',
         text: reason,
-        icon: "warning",
+        icon: 'warning',
         customClass: { popup: sketchPopupClass },
       });
     });
 
-    socket.on("uttt_gameState", (room) => {
-      logger.socket("⬅️", "uttt_gameState", {
+    socket.on('uttt_gameState', (room) => {
+      logger.socket('⬅️', 'uttt_gameState', {
         gameState: room.gameState,
         currentTurn: room.currentTurn,
         activeGrid: room.activeGrid,
@@ -116,9 +102,9 @@ const UTTTGame = () => {
       setLastMove(room.lastMove);
     });
 
-    socket.on("uttt_gameStarted", () => {
-      logger.socket("⬅️", "uttt_gameStarted", "Game started!");
-      setGameState("playing");
+    socket.on('uttt_gameStarted', () => {
+      logger.socket('⬅️', 'uttt_gameStarted', 'Game started!');
+      setGameState('playing');
       setBoard(
         Array(9)
           .fill(null)
@@ -129,7 +115,7 @@ const UTTTGame = () => {
       setScores({ X: 0, O: 0 });
       setLastMove(null);
       Swal.fire({
-        title: "Game Started!",
+        title: 'Game Started!',
         html: '<div class="font-handwriting">Ultimate Tic-Tac-Toe begins!</div>',
         timer: 1500,
         showConfirmButton: false,
@@ -137,17 +123,17 @@ const UTTTGame = () => {
       });
     });
 
-    socket.on("uttt_gameOver", ({ winner, symbol, scores, reason }) => {
-      logger.socket("⬅️", "uttt_gameOver", { winner, symbol, scores, reason });
+    socket.on('uttt_gameOver', ({ winner, symbol, scores, reason }) => {
+      logger.socket('⬅️', 'uttt_gameOver', { winner, symbol, scores, reason });
       playWin();
 
       // Epic confetti for macro win
-      if (reason === "macro_win") {
+      if (reason === 'macro_win') {
         confetti({
           particleCount: 150,
           spread: 80,
           origin: { y: 0.6 },
-          colors: ["#1a1a2e", "#c73e1d", "#2d4a8f"],
+          colors: ['#1a1a2e', '#c73e1d', '#2d4a8f'],
         });
         setTimeout(() => {
           confetti({
@@ -174,50 +160,48 @@ const UTTTGame = () => {
       }
 
       let winnerName;
-      if (reason === "tiebreaker" && scores.X === scores.O) {
+      if (reason === 'tiebreaker' && scores.X === scores.O) {
         winnerName = "No one - it's a tie!";
       } else if (winner) {
-        winnerName = players.find((p) => p.id === winner)?.name || "Someone";
+        winnerName = players.find((p) => p.id === winner)?.name || 'Someone';
       } else {
-        winnerName = symbol || "Someone";
+        winnerName = symbol || 'Someone';
       }
 
       const reasonText =
-        reason === "macro_win"
-          ? " achieved a Macro Victory!"
-          : ` won by grids (${scores.X} - ${scores.O})!`;
+        reason === 'macro_win' ? ' achieved a Macro Victory!' : ` won by grids (${scores.X} - ${scores.O})!`;
 
       Swal.fire({
-        title: "🏆 Victory! 🏆",
+        title: '🏆 Victory! 🏆',
         html: `<div class="font-handwriting text-lg">${winnerName}${reasonText}</div>`,
-        icon: "success",
-        confirmButtonText: "Awesome!",
+        icon: 'success',
+        confirmButtonText: 'Awesome!',
         customClass: { popup: sketchPopupClass },
       });
 
-      setGameState("ended");
-      sessionStorage.removeItem("uttt_reconnect");
+      setGameState('ended');
+      sessionStorage.removeItem('uttt_reconnect');
     });
 
-    socket.on("uttt_error", ({ message }) => {
-      logger.socket("⬅️", "uttt_error", { message });
+    socket.on('uttt_error', ({ message }) => {
+      logger.socket('⬅️', 'uttt_error', { message });
       Swal.fire({
-        title: "Oops!",
+        title: 'Oops!',
         text: message,
-        icon: "error",
+        icon: 'error',
         customClass: { popup: sketchPopupClass },
       });
     });
 
-    socket.on("uttt_playerLeft", ({ playerId }) => {
-      logger.socket("⬅️", "uttt_playerLeft", { playerId });
+    socket.on('uttt_playerLeft', ({ playerId }) => {
+      logger.socket('⬅️', 'uttt_playerLeft', { playerId });
       Swal.fire({
-        title: "Player Left",
-        text: "Your opponent has left the game.",
-        icon: "warning",
+        title: 'Player Left',
+        text: 'Your opponent has left the game.',
+        icon: 'warning',
         customClass: { popup: sketchPopupClass },
       });
-      setGameState("waiting");
+      setGameState('waiting');
       setBoard(
         Array(9)
           .fill(null)
@@ -227,7 +211,7 @@ const UTTTGame = () => {
       setActiveGrid(null);
     });
 
-    socket.on("uttt_alert", ({ icon, title, text }) => {
+    socket.on('uttt_alert', ({ icon, title, text }) => {
       Swal.fire({
         title,
         text,
@@ -237,47 +221,47 @@ const UTTTGame = () => {
     });
 
     return () => {
-      socket.off("uttt_roomInfo");
-      socket.off("uttt_gameState");
-      socket.off("uttt_gameStarted");
-      socket.off("uttt_gameOver");
-      socket.off("uttt_error");
-      socket.off("uttt_playerLeft");
-      socket.off("uttt_gamePaused");
-      socket.off("uttt_alert");
+      socket.off('uttt_roomInfo');
+      socket.off('uttt_gameState');
+      socket.off('uttt_gameStarted');
+      socket.off('uttt_gameOver');
+      socket.off('uttt_error');
+      socket.off('uttt_playerLeft');
+      socket.off('uttt_gamePaused');
+      socket.off('uttt_alert');
     };
   }, [socket, players, setRoomId, playWin]);
 
   const handleCellClick = (gridIndex, squareIndex) => {
-    if (gameState === "playing" && currentTurn === socket?.id) {
+    if (gameState === 'playing' && currentTurn === socket?.id) {
       if (activeGrid !== null && activeGrid !== gridIndex) return;
       if (board[gridIndex][squareIndex] !== null) return;
 
       playMove();
-      logger.socket("➡️", "uttt_makeMove", { roomId, gridIndex, squareIndex });
-      socket.emit("uttt_makeMove", { roomId, gridIndex, squareIndex });
+      logger.socket('➡️', 'uttt_makeMove', { roomId, gridIndex, squareIndex });
+      socket.emit('uttt_makeMove', { roomId, gridIndex, squareIndex });
     }
   };
 
   const handleCreateRoom = () => {
-    logger.socket("➡️", "uttt_createRoom", { playerName });
-    socket.emit("uttt_createRoom", playerName);
+    logger.socket('➡️', 'uttt_createRoom', { playerName });
+    socket.emit('uttt_createRoom', playerName);
   };
 
   const handleJoinRoom = async () => {
     const { value: joinRoomId } = await Swal.fire({
-      title: "Join UTTT Room",
-      input: "text",
-      inputPlaceholder: "Enter Room ID",
+      title: 'Join UTTT Room',
+      input: 'text',
+      inputPlaceholder: 'Enter Room ID',
       showCancelButton: true,
       customClass: { popup: sketchPopupClass },
     });
     if (joinRoomId) {
-      logger.socket("➡️", "uttt_joinRoom", {
+      logger.socket('➡️', 'uttt_joinRoom', {
         roomId: joinRoomId.toUpperCase(),
         playerName,
       });
-      socket.emit("uttt_joinRoom", {
+      socket.emit('uttt_joinRoom', {
         roomId: joinRoomId.toUpperCase(),
         playerName,
       });
@@ -285,24 +269,24 @@ const UTTTGame = () => {
   };
 
   const handleRestartGame = () => {
-    logger.socket("➡️", "uttt_restartGame", { roomId });
-    socket.emit("uttt_restartGame", roomId);
+    logger.socket('➡️', 'uttt_restartGame', { roomId });
+    socket.emit('uttt_restartGame', roomId);
   };
 
   const handleLeaveRoom = () => {
     Swal.fire({
-      title: "Leave Game?",
-      text: "Are you sure you want to leave?",
-      icon: "warning",
+      title: 'Leave Game?',
+      text: 'Are you sure you want to leave?',
+      icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: "Yes, leave",
+      confirmButtonText: 'Yes, leave',
       customClass: { popup: sketchPopupClass },
     }).then((result) => {
       if (result.isConfirmed) {
-        socket.emit("uttt_leaveRoom", roomId);
-        sessionStorage.removeItem("uttt_reconnect");
+        socket.emit('uttt_leaveRoom', roomId);
+        sessionStorage.removeItem('uttt_reconnect');
         clearRoomId(roomId);
-        navigate("/");
+        navigate('/');
       }
     });
   };
@@ -310,203 +294,158 @@ const UTTTGame = () => {
   return (
     <GameLayout socket={socket} roomId={roomId} gamePrefix="uttt" players={players}>
       <div className="flex flex-col items-center justify-center p-2 sm:p-4 w-full">
+        {/* Title with sketch effect */}
+        <div className="text-center mb-3 sm:mb-6">
+          <h1 className="text-2xl sm:text-3xl md:text-5xl font-sketch mb-1 sm:mb-2 text-ink flex items-center gap-2 sm:gap-3 justify-center">
+            <Grid3X3 className="w-6 h-6 sm:w-8 sm:h-8 text-ink" />
+            <span className="hidden sm:inline">Ultimate Tic-Tac-Toe</span>
+            <span className="sm:hidden">UTTT</span>
+          </h1>
+          <p className="font-handwriting text-xs sm:text-sm text-gray-600 hidden sm:block">
+            Win three grids in a row to claim victory!
+          </p>
+        </div>
 
-      {/* Title with sketch effect */}
-      <div className="text-center mb-3 sm:mb-6">
-        <h1 className="text-2xl sm:text-3xl md:text-5xl font-sketch mb-1 sm:mb-2 text-ink flex items-center gap-2 sm:gap-3 justify-center">
-          <Grid3X3 className="w-6 h-6 sm:w-8 sm:h-8 text-ink" />
-          <span className="hidden sm:inline">Ultimate Tic-Tac-Toe</span>
-          <span className="sm:hidden">UTTT</span>
-        </h1>
-        <p className="font-handwriting text-xs sm:text-sm text-gray-600 hidden sm:block">
-          Win three grids in a row to claim victory!
-        </p>
-      </div>
-
-      {!roomId ? (
-        <SketchCard
-          className="p-6 sm:p-8 max-w-md w-full"
-          style={{ background: "#fffef9" }}
-        >
-          <div className="text-center mb-6">
-            <Sparkles className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-3 text-ink" />
-            <h2 className="font-sketch text-xl sm:text-2xl text-ink mb-2">
-              Ready to Play?
-            </h2>
-            <p className="font-handwriting text-sm text-gray-600">
-              Create a new game or join an existing one
-            </p>
-          </div>
-          <div className="flex gap-3 sm:gap-4 flex-col sm:flex-row">
-            <SketchButton
-              onClick={handleCreateRoom}
-              className="text-sm sm:text-base px-4 sm:px-6 py-2 sm:py-3 flex-1"
-            >
-              Create Room
-            </SketchButton>
-            <SketchButton
-              onClick={handleJoinRoom}
-              className="text-sm sm:text-base px-4 sm:px-6 py-2 sm:py-3 flex-1"
-            >
-              Join Room
-            </SketchButton>
-          </div>
-        </SketchCard>
-      ) : (
-        <div className="w-full max-w-sm sm:max-w-2xl md:max-w-3xl">
-          {/* Game Info Card */}
-          <SketchCard
-            className="p-3 sm:p-4 mb-3 sm:mb-6 flex flex-col gap-3"
-            style={{ background: "#fffef9" }}
-          >
-            {/* Room ID and Score */}
-            <div className="flex justify-between items-center">
-              <div className="font-handwriting text-ink flex items-center gap-1 sm:gap-2 text-xs sm:text-base">
-                <Grid3X3 size={14} className="sm:w-[18px] text-ink" />
-                <span className="hidden sm:inline">Room:</span>
-                <span className="font-bold text-ink uppercase tracking-wider">
-                  {roomId}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2 sm:gap-3 bg-white/50 px-3 py-1.5 rounded-lg border border-gray-300/30">
-                <div className="flex items-center gap-1">
-                  <div
-                    className="w-2 h-2 rounded-full"
-                    style={{ background: PLAYER_COLORS[0] }}
-                  />
-                  <span
-                    className="font-bold text-sm sm:text-lg"
-                    style={{ color: PLAYER_COLORS[0] }}
-                  >
-                    {scores.X}
-                  </span>
-                </div>
-                <span className="text-gray-400 font-bold">:</span>
-                <div className="flex items-center gap-1">
-                  <span
-                    className="font-bold text-sm sm:text-lg"
-                    style={{ color: PLAYER_COLORS[1] }}
-                  >
-                    {scores.O}
-                  </span>
-                  <div
-                    className="w-2 h-2 rounded-full"
-                    style={{ background: PLAYER_COLORS[1] }}
-                  />
-                </div>
-              </div>
+        {!roomId ? (
+          <SketchCard className="p-6 sm:p-8 max-w-md w-full" style={{ background: '#fffef9' }}>
+            <div className="text-center mb-6">
+              <Sparkles className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-3 text-ink" />
+              <h2 className="font-sketch text-xl sm:text-2xl text-ink mb-2">Ready to Play?</h2>
+              <p className="font-handwriting text-sm text-gray-600">Create a new game or join an existing one</p>
             </div>
-
-            {/* Players */}
-            <div className="flex gap-2 sm:gap-4 text-xs sm:text-sm justify-center">
-              {players.map((p, i) => (
-                <div
-                  key={p.id}
-                  className={`flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 rounded-lg transition-all duration-300 border ${
-                    p.id === currentTurn
-                      ? "bg-white border-2 scale-105 shadow-md"
-                      : "bg-white/30 border-gray-300/30 opacity-60"
-                  }`}
-                  style={{
-                    borderColor:
-                      p.id === currentTurn ? PLAYER_COLORS[i] : undefined,
-                  }}
-                >
-                  {p.id === currentTurn && (
-                    <Sparkles
-                      size={12}
-                      className="sm:w-4 text-yellow-500 animate-pulse"
-                    />
-                  )}
-                  <span
-                    className="font-bold font-handwriting text-xs sm:text-base"
-                    style={{ color: PLAYER_COLORS[i] }}
-                  >
-                    {p.name.length > 8 ? p.name.slice(0, 8) + "..." : p.name}
-                  </span>
-                  <span className="text-[10px] sm:text-xs opacity-60">
-                    ({i === 0 ? "X" : "O"})
-                  </span>
-                  {i === myPlayerIndex && (
-                    <span className="text-[10px] bg-yellow-100 px-1.5 rounded text-yellow-700 font-bold">
-                      You
-                    </span>
-                  )}
-                </div>
-              ))}
+            <div className="flex gap-3 sm:gap-4 flex-col sm:flex-row">
+              <SketchButton
+                onClick={handleCreateRoom}
+                className="text-sm sm:text-base px-4 sm:px-6 py-2 sm:py-3 flex-1"
+              >
+                Create Room
+              </SketchButton>
+              <SketchButton onClick={handleJoinRoom} className="text-sm sm:text-base px-4 sm:px-6 py-2 sm:py-3 flex-1">
+                Join Room
+              </SketchButton>
             </div>
           </SketchCard>
+        ) : (
+          <div className="w-full max-w-sm sm:max-w-2xl md:max-w-3xl">
+            {/* Game Info Card */}
+            <SketchCard className="p-3 sm:p-4 mb-3 sm:mb-6 flex flex-col gap-3" style={{ background: '#fffef9' }}>
+              {/* Room ID and Score */}
+              <div className="flex justify-between items-center">
+                <div className="font-handwriting text-ink flex items-center gap-1 sm:gap-2 text-xs sm:text-base">
+                  <Grid3X3 size={14} className="sm:w-[18px] text-ink" />
+                  <span className="hidden sm:inline">Room:</span>
+                  <span className="font-bold text-ink uppercase tracking-wider">{roomId}</span>
+                </div>
 
-          {/* Game Board */}
-          <div className="mb-4 sm:mb-6">
-            <MacroGrid
-              board={board}
-              macroBoard={macroBoard}
-              activeGrid={activeGrid}
-              lastMove={lastMove}
-              onCellClick={handleCellClick}
-            />
-          </div>
+                <div className="flex items-center gap-2 sm:gap-3 bg-white/50 px-3 py-1.5 rounded-lg border border-gray-300/30">
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 rounded-full" style={{ background: PLAYER_COLORS[0] }} />
+                    <span className="font-bold text-sm sm:text-lg" style={{ color: PLAYER_COLORS[0] }}>
+                      {scores.X}
+                    </span>
+                  </div>
+                  <span className="text-gray-400 font-bold">:</span>
+                  <div className="flex items-center gap-1">
+                    <span className="font-bold text-sm sm:text-lg" style={{ color: PLAYER_COLORS[1] }}>
+                      {scores.O}
+                    </span>
+                    <div className="w-2 h-2 rounded-full" style={{ background: PLAYER_COLORS[1] }} />
+                  </div>
+                </div>
+              </div>
 
-          {/* Game Status */}
-          <div className="text-center font-handwriting text-sm sm:text-lg text-ink flex flex-col items-center gap-3">
-            {gameState === "playing" ? (
-              currentTurn === socket?.id ? (
-                <div className="flex items-center gap-2 sm:gap-3 text-ink animate-pulse bg-white/80 px-4 sm:px-6 py-2 sm:py-3 rounded-xl border-2 border-ink shadow-lg">
-                  <Trophy size={20} className="sm:w-6 text-yellow-500" />
-                  <span className="font-sketch text-base sm:text-xl">
-                    Your Turn!
+              {/* Players */}
+              <div className="flex gap-2 sm:gap-4 text-xs sm:text-sm justify-center">
+                {players.map((p, i) => (
+                  <div
+                    key={p.id}
+                    className={`flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 rounded-lg transition-all duration-300 border ${
+                      p.id === currentTurn
+                        ? 'bg-white border-2 scale-105 shadow-md'
+                        : 'bg-white/30 border-gray-300/30 opacity-60'
+                    }`}
+                    style={{
+                      borderColor: p.id === currentTurn ? PLAYER_COLORS[i] : undefined,
+                    }}
+                  >
+                    {p.id === currentTurn && <Sparkles size={12} className="sm:w-4 text-yellow-500 animate-pulse" />}
+                    <span
+                      className="font-bold font-handwriting text-xs sm:text-base"
+                      style={{ color: PLAYER_COLORS[i] }}
+                    >
+                      {p.name.length > 8 ? p.name.slice(0, 8) + '...' : p.name}
+                    </span>
+                    <span className="text-[10px] sm:text-xs opacity-60">({i === 0 ? 'X' : 'O'})</span>
+                    {i === myPlayerIndex && (
+                      <span className="text-[10px] bg-yellow-100 px-1.5 rounded text-yellow-700 font-bold">You</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </SketchCard>
+
+            {/* Game Board */}
+            <div className="mb-4 sm:mb-6">
+              <MacroGrid
+                board={board}
+                macroBoard={macroBoard}
+                activeGrid={activeGrid}
+                lastMove={lastMove}
+                onCellClick={handleCellClick}
+              />
+            </div>
+
+            {/* Game Status */}
+            <div className="text-center font-handwriting text-sm sm:text-lg text-ink flex flex-col items-center gap-3">
+              {gameState === 'playing' ? (
+                currentTurn === socket?.id ? (
+                  <div className="flex items-center gap-2 sm:gap-3 text-ink animate-pulse bg-white/80 px-4 sm:px-6 py-2 sm:py-3 rounded-xl border-2 border-ink shadow-lg">
+                    <Trophy size={20} className="sm:w-6 text-yellow-500" />
+                    <span className="font-sketch text-base sm:text-xl">Your Turn!</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2 bg-white/50 px-4 sm:px-6 py-2 sm:py-3 rounded-xl border border-gray-300/30">
+                    <div className="flex items-center gap-2 text-ink">
+                      <div className="w-3 h-3 sm:w-4 sm:h-4 border-2 border-ink border-t-transparent rounded-full animate-spin" />
+                      <span className="hidden sm:inline">
+                        Waiting for {players.find((p) => p.id === currentTurn)?.name || 'opponent'}
+                        ...
+                      </span>
+                      <span className="sm:hidden">Opponent&apos;s turn...</span>
+                    </div>
+                  </div>
+                )
+              ) : gameState === 'waiting' ? (
+                <div className="bg-white/50 px-4 sm:px-6 py-2 sm:py-3 rounded-xl border border-gray-300/30">
+                  <span className="text-xs sm:text-base flex items-center gap-2">
+                    <Users size={16} className="text-gray-500" />
+                    Waiting for opponent...
                   </span>
                 </div>
               ) : (
-                <div className="flex flex-col items-center gap-2 bg-white/50 px-4 sm:px-6 py-2 sm:py-3 rounded-xl border border-gray-300/30">
-                  <div className="flex items-center gap-2 text-ink">
-                    <div className="w-3 h-3 sm:w-4 sm:h-4 border-2 border-ink border-t-transparent rounded-full animate-spin" />
-                    <span className="hidden sm:inline">
-                      Waiting for{" "}
-                      {players.find((p) => p.id === currentTurn)?.name ||
-                        "opponent"}
-                      ...
-                    </span>
-                    <span className="sm:hidden">Opponent's turn...</span>
-                  </div>
-                </div>
-              )
-            ) : gameState === "waiting" ? (
-              <div className="bg-white/50 px-4 sm:px-6 py-2 sm:py-3 rounded-xl border border-gray-300/30">
-                <span className="text-xs sm:text-base flex items-center gap-2">
-                  <Users size={16} className="text-gray-500" />
-                  Waiting for opponent...
-                </span>
-              </div>
-            ) : (
-              <SketchButton
-                onClick={handleRestartGame}
-                className="text-sm sm:text-base px-4 sm:px-6 py-2 sm:py-3"
-              >
-                Play Again
-              </SketchButton>
-            )}
+                <SketchButton onClick={handleRestartGame} className="text-sm sm:text-base px-4 sm:px-6 py-2 sm:py-3">
+                  Play Again
+                </SketchButton>
+              )}
 
-            {(gameState === "waiting" || gameState === "playing") && (
-              <SketchButton
-                onClick={handleLeaveRoom}
-                className="mt-2 text-xs sm:text-sm px-3 sm:px-5 py-1.5 sm:py-2 opacity-70 hover:opacity-100"
-              >
-                Leave Room
-              </SketchButton>
+              {(gameState === 'waiting' || gameState === 'playing') && (
+                <SketchButton
+                  onClick={handleLeaveRoom}
+                  className="mt-2 text-xs sm:text-sm px-3 sm:px-5 py-1.5 sm:py-2 opacity-70 hover:opacity-100"
+                >
+                  Leave Room
+                </SketchButton>
+              )}
+            </div>
+
+            {/* Grid hint */}
+            {activeGrid !== null && gameState === 'playing' && (
+              <div className="text-center mt-4 font-handwriting text-xs sm:text-sm text-gray-600 bg-blue-50 px-4 py-2 rounded-lg border border-blue-200/50">
+                📍 You must play in grid {activeGrid + 1}
+              </div>
             )}
           </div>
-
-          {/* Grid hint */}
-          {activeGrid !== null && gameState === "playing" && (
-            <div className="text-center mt-4 font-handwriting text-xs sm:text-sm text-gray-600 bg-blue-50 px-4 py-2 rounded-lg border border-blue-200/50">
-              📍 You must play in grid {activeGrid + 1}
-            </div>
-          )}
-        </div>
-      )}
+        )}
       </div>
     </GameLayout>
   );
