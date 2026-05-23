@@ -26,11 +26,12 @@ export const showSwal = ({ title, text, icon = 'info', timer, confirmText, showC
       popup: 'glass rounded-3xl border-2 border-blue-200/50',
       title: 'hand-drawn text-3xl text-blue-600',
       htmlContainer: 'paper-font text-gray-600 text-lg',
-      confirmButton: 'bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105'
+      confirmButton:
+        'bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105',
     },
     buttonsStyling: false,
     allowOutsideClick: false,
-    allowEscapeKey: false
+    allowEscapeKey: false,
   });
 };
 
@@ -43,9 +44,9 @@ export const showError = (title, message) => {
     customClass: {
       popup: 'glass rounded-3xl',
       title: 'hand-drawn text-2xl text-red-500',
-      confirmButton: 'bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-xl font-bold'
+      confirmButton: 'bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-xl font-bold',
     },
-    buttonsStyling: false
+    buttonsStyling: false,
   });
 };
 
@@ -58,11 +59,11 @@ export const showSuccess = (title, message) => {
     customClass: {
       popup: 'glass rounded-3xl',
       title: 'hand-drawn text-3xl text-green-600',
-      confirmButton: 'bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-xl font-bold'
+      confirmButton: 'bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-xl font-bold',
     },
     buttonsStyling: false,
     timer: 2000,
-    showConfirmButton: false
+    showConfirmButton: false,
   });
 };
 
@@ -79,8 +80,8 @@ export const showWaiting = (title, message) => {
     customClass: {
       popup: 'glass rounded-3xl',
       title: 'hand-drawn text-xl text-blue-500',
-      loader: 'text-blue-500'
-    }
+      loader: 'text-blue-500',
+    },
   });
 };
 
@@ -90,7 +91,7 @@ export const showInput = async (title, placeholder, confirmText = 'Join') => {
     input: 'text',
     inputPlaceholder: placeholder,
     inputAttributes: {
-      class: 'paper-font text-lg text-center uppercase tracking-wider'
+      class: 'paper-font text-lg text-center uppercase tracking-wider',
     },
     showCancelButton: true,
     confirmButtonText: confirmText,
@@ -103,9 +104,9 @@ export const showInput = async (title, placeholder, confirmText = 'Join') => {
       title: 'hand-drawn text-2xl text-blue-600',
       input: 'glass border-2 border-blue-200 rounded-xl px-4 py-3 text-center',
       confirmButton: 'bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-xl font-bold',
-      cancelButton: 'bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-xl font-bold'
+      cancelButton: 'bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-xl font-bold',
     },
-    buttonsStyling: false
+    buttonsStyling: false,
   });
   return value;
 };
@@ -125,16 +126,14 @@ export const showConfirm = async (title, message, confirmText = 'Yes', cancelTex
       popup: 'glass rounded-3xl',
       title: 'hand-drawn text-2xl text-blue-600',
       confirmButton: 'bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-xl font-bold',
-      cancelButton: 'bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-xl font-bold'
+      cancelButton: 'bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-xl font-bold',
     },
-    buttonsStyling: false
+    buttonsStyling: false,
   });
   return isConfirmed;
 };
 
-export const showRoomCreated = async (roomId, gameName = 'Game') => {
-  let copied = false;
-  
+export const showRoomCreated = async (roomId) => {
   const result = await Swal.fire({
     title: '🎉 Room Created!',
     html: `
@@ -160,7 +159,7 @@ export const showRoomCreated = async (roomId, gameName = 'Game') => {
     customClass: {
       popup: 'glass rounded-3xl',
       title: 'hand-drawn text-3xl text-green-600',
-      confirmButton: 'bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-xl font-bold'
+      confirmButton: 'bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-xl font-bold',
     },
     buttonsStyling: false,
     allowOutsideClick: false,
@@ -168,14 +167,13 @@ export const showRoomCreated = async (roomId, gameName = 'Game') => {
       const copyBtn = document.getElementById('copy-btn');
       copyBtn.addEventListener('click', () => {
         navigator.clipboard.writeText(roomId);
-        copied = true;
         document.getElementById('copy-text').classList.remove('hidden');
         setTimeout(() => {
           document.getElementById('copy-text').classList.add('hidden');
         }, 2000);
       });
-    }
+    },
   });
-  
+
   return result.isConfirmed;
 };

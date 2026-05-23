@@ -4,7 +4,7 @@ import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
 import { sketchPopupClass } from './SketchPopup';
 
-const GameLayout = ({ socket, roomId, gamePrefix, players = [], children }) => {
+const GameLayout = ({ socket, roomId, _gamePrefix, players = [], children }) => {
   const navigate = useNavigate();
 
   const handleLeave = async () => {
@@ -30,11 +30,7 @@ const GameLayout = ({ socket, roomId, gamePrefix, players = [], children }) => {
     <div className="min-h-screen bg-paper flex flex-col">
       {/* Info Zone */}
       <nav className="flex items-center justify-between px-4 py-2 border-b border-ink/10">
-        <button
-          onClick={handleLeave}
-          aria-label="Back"
-          className="sketch-button text-red-600 hover:bg-red-50"
-        >
+        <button onClick={handleLeave} aria-label="Back" className="sketch-button text-red-600 hover:bg-red-50">
           <ArrowLeft size={20} />
         </button>
 
@@ -59,9 +55,7 @@ const GameLayout = ({ socket, roomId, gamePrefix, players = [], children }) => {
       </nav>
 
       {/* Canvas Zone */}
-      <main className="flex-1 flex items-center justify-center p-4">
-        {children}
-      </main>
+      <main className="flex-1 flex items-center justify-center p-4">{children}</main>
     </div>
   );
 };

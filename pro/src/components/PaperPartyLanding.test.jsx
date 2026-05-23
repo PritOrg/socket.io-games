@@ -1,6 +1,6 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
 import PaperPartyLanding from './PaperPartyLanding';
 import { GameProvider } from '../context/GameContext';
 import { BrowserRouter } from 'react-router-dom';
@@ -8,8 +8,8 @@ import { BrowserRouter } from 'react-router-dom';
 // Mock SweetAlert2
 vi.mock('sweetalert2', () => ({
   default: {
-    fire: vi.fn().mockResolvedValue({ isConfirmed: true, value: 'Alice' })
-  }
+    fire: vi.fn().mockResolvedValue({ isConfirmed: true, value: 'Alice' }),
+  },
 }));
 
 describe('PaperPartyLanding', () => {
@@ -19,7 +19,7 @@ describe('PaperPartyLanding', () => {
         <BrowserRouter>
           <PaperPartyLanding />
         </BrowserRouter>
-      </GameProvider>
+      </GameProvider>,
     );
 
     expect(screen.getByText('Bingo')).toBeDefined();

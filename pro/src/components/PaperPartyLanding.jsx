@@ -1,14 +1,15 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameContext } from '../context/GameContext';
-import RetroButton from './ui/RetroButton';
 import Swal from 'sweetalert2';
 import { User, BookOpen, PenTool, Share2, Zap, Circle } from 'lucide-react';
 
 const BingoIcon = () => (
   <svg viewBox="0 0 48 48" className="w-full h-full">
     <rect x="4" y="4" width="40" height="40" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="4 2" />
-    <text x="24" y="28" textAnchor="middle" className="text-lg font-bold" fill="currentColor">B</text>
+    <text x="24" y="28" textAnchor="middle" className="text-lg font-bold" fill="currentColor">
+      B
+    </text>
   </svg>
 );
 
@@ -18,8 +19,12 @@ const TicTacToeIcon = () => (
     <line x1="32" y1="4" x2="32" y2="44" stroke="currentColor" strokeWidth="2" strokeDasharray="4 2" />
     <line x1="4" y1="16" x2="44" y2="16" stroke="currentColor" strokeWidth="2" strokeDasharray="4 2" />
     <line x1="4" y1="32" x2="44" y2="32" stroke="currentColor" strokeWidth="2" strokeDasharray="4 2" />
-    <text x="10" y="14" className="text-lg font-bold" fill="currentColor">X</text>
-    <text x="26" y="30" className="text-lg font-bold" fill="currentColor">O</text>
+    <text x="10" y="14" className="text-lg font-bold" fill="currentColor">
+      X
+    </text>
+    <text x="26" y="30" className="text-lg font-bold" fill="currentColor">
+      O
+    </text>
   </svg>
 );
 
@@ -28,9 +33,22 @@ const UTTTIcon = () => (
     <rect x="2" y="2" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="4 2" />
     <rect x="26" y="2" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="4 2" />
     <rect x="2" y="26" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="4 2" />
-    <rect x="26" y="26" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="4 2" />
-    <text x="12" y="16" className="text-sm font-bold" fill="currentColor">X</text>
-    <text x="36" y="40" className="text-sm font-bold" fill="currentColor">O</text>
+    <rect
+      x="26"
+      y="26"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeDasharray="4 2"
+    />
+    <text x="12" y="16" className="text-sm font-bold" fill="currentColor">
+      X
+    </text>
+    <text x="36" y="40" className="text-sm font-bold" fill="currentColor">
+      O
+    </text>
   </svg>
 );
 
@@ -56,15 +74,14 @@ const DotsAndBoxesIcon = () => (
 const ComingSoonIcon = () => (
   <svg viewBox="0 0 48 48" className="w-full h-full" fill="none" stroke="currentColor" strokeWidth="1.5">
     <circle cx="24" cy="24" r="20" strokeDasharray="6 4" />
-    <text x="24" y="28" textAnchor="middle" className="text-xs font-bold" fill="currentColor">?</text>
+    <text x="24" y="28" textAnchor="middle" className="text-xs font-bold" fill="currentColor">
+      ?
+    </text>
   </svg>
 );
 
 const GameCard = ({ title, description, onClick, icon: Icon, accentColor, badge }) => (
-  <div
-    onClick={onClick}
-    className="group relative cursor-pointer transition-all duration-300 hover:-translate-y-1"
-  >
+  <div onClick={onClick} className="group relative cursor-pointer transition-all duration-300 hover:-translate-y-1">
     <div className="absolute -inset-1 bg-gradient-to-r from-transparent via-gray-300 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
     <div className="relative glass rounded-2xl p-4 sm:p-6 border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors">
       <div className="flex items-start gap-4">
@@ -86,7 +103,13 @@ const GameCard = ({ title, description, onClick, icon: Icon, accentColor, badge 
       <div className="mt-3 sm:mt-4 flex items-center gap-2 text-xs sm:text-sm text-gray-400 group-hover:text-gray-600 transition-colors">
         <PenTool size={12} />
         <span>Click to play</span>
-        <svg className="w-4 h-4 transform group-hover:translate-x-1 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg
+          className="w-4 h-4 transform group-hover:translate-x-1 transition-transform"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
           <path d="M5 12h14M12 5l7 7-7 7" />
         </svg>
       </div>
@@ -106,16 +129,16 @@ const PaperPartyLanding = () => {
         input: 'text',
         inputPlaceholder: 'Enter your name...',
         allowOutsideClick: false,
-        confirmButtonText: 'Let\'s Play!',
+        confirmButtonText: "Let's Play!",
         customClass: {
           popup: 'glass rounded-3xl paper-font',
           title: 'hand-drawn text-3xl',
-          confirmButton: 'bg-blue-500/80 hover:bg-blue-500 px-8 py-3 rounded-xl font-bold transition-all'
+          confirmButton: 'bg-blue-500/80 hover:bg-blue-500 px-8 py-3 rounded-xl font-bold transition-all',
         },
         buttonsStyling: false,
         inputValidator: (value) => {
           if (!value) return 'We need a name to start the party!';
-        }
+        },
       }).then((result) => {
         if (result.isConfirmed) {
           setPlayerName(result.value);
@@ -126,10 +149,13 @@ const PaperPartyLanding = () => {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-8 relative overflow-hidden">
-      <div className="absolute inset-0 opacity-[0.03]" style={{
-        backgroundImage: `repeating-linear-gradient(transparent, transparent 23px, #333 24px)`,
-        backgroundSize: '100% 24px'
-      }} />
+      <div
+        className="absolute inset-0 opacity-[0.03]"
+        style={{
+          backgroundImage: `repeating-linear-gradient(transparent, transparent 23px, #333 24px)`,
+          backgroundSize: '100% 24px',
+        }}
+      />
 
       <div className="absolute top-4 left-4 w-32 h-32 text-gray-300 transform -rotate-12">
         <BookOpen size={128} strokeWidth={0.5} />

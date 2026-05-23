@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useGameContext } from '../context/GameContext';
-import { SketchButton, SketchCard, SketchBorder, sketchPopupClass, GameLayout } from '../components/ui';
-import useGameHandlers from '../hooks/useGameHandlers';
+import { SketchButton, SketchCard, sketchPopupClass, GameLayout } from '../components/ui';
 import useSound from 'use-sound';
 import confetti from 'canvas-confetti';
 import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, Trophy, Grid3X3, Star, Sparkles } from 'lucide-react';
+import { Users, Trophy, Grid3X3, Sparkles } from 'lucide-react';
 import MacroGrid from './components/MacroGrid';
 import logger from '../utils/logger';
 
@@ -26,9 +25,9 @@ const UTTTGame = () => {
   const [activeGrid, setActiveGrid] = useState(null);
   const [scores, setScores] = useState({ X: 0, O: 0 });
   const [lastMove, setLastMove] = useState(null);
-  const [mySymbol, setMySymbol] = useState(null);
+  const [, setMySymbol] = useState(null);
   const [myPlayerIndex, setMyPlayerIndex] = useState(-1);
-  const [isPaused, setIsPaused] = useState(false);
+  const [, setIsPaused] = useState(false);
   const navigate = useNavigate();
 
   const [playMove] = useSound('/sounds/move.mp3', { volume: 0.5 });

@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { GameProvider, useGameContext } from './GameContext';
 
 const TestComponent = () => {
@@ -18,7 +18,7 @@ describe('GameContext', () => {
     render(
       <GameProvider>
         <TestComponent />
-      </GameProvider>
+      </GameProvider>,
     );
 
     const nameDisplay = screen.getByTestId('player-name');

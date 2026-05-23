@@ -19,7 +19,9 @@ describe('TicTacToe Game Logic', function () {
     player1 = client(`http://localhost:${port}`);
     player2 = client(`http://localhost:${port}`);
     let connected = 0;
-    const check = () => { if (++connected === 2) done(); };
+    const check = () => {
+      if (++connected === 2) done();
+    };
     player1.on('connect', check);
     player2.on('connect', check);
   });
@@ -143,9 +145,11 @@ describe('TicTacToe Game Logic', function () {
       setupGame((roomId) => {
         // X: 0,1,2  O: 3,4
         const moves = [
-          [player1, 0], [player2, 3],
-          [player1, 1], [player2, 4],
-          [player1, 2]
+          [player1, 0],
+          [player2, 3],
+          [player1, 1],
+          [player2, 4],
+          [player1, 2],
         ];
         let i = 0;
         const next = () => {
@@ -180,7 +184,7 @@ describe('TicTacToe Game Logic', function () {
 
   describe('Disconnect', () => {
     it('should pause game and notify opponent on disconnect', (done) => {
-      setupGame((roomId) => {
+      setupGame((_roomId) => {
         player1.once('ttt_gamePaused', ({ reason }) => {
           expect(reason).to.be.a('string');
           done();
@@ -190,8 +194,7 @@ describe('TicTacToe Game Logic', function () {
     });
 
     it('should emit playerLeft on disconnect', (done) => {
-      setupGame((roomId) => {
-        const p2Id = player2.id;
+      setupGame((_roomId) => {
         player1.once('ttt_playerLeft', (data) => {
           expect(data.playerId).to.be.a('string');
           done();

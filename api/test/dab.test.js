@@ -1,5 +1,5 @@
 process.env.NODE_ENV = 'test';
-const { server, io } = require('../index');
+const { server } = require('../index');
 const client = require('socket.io-client');
 const { expect } = require('chai');
 
@@ -150,13 +150,13 @@ describe('Dots & Boxes (DAB) Game Logic', function () {
         const roomId = room.id;
         player2.emit('dab_joinRoom', { roomId, playerName: 'Bob' });
 
-player2.once('dab_roomInfo', (updatedRoom) => {
-           if (updatedRoom.players.length === 2) {
-             expect(updatedRoom.players[0].name).to.equal('Player 1');
-             expect(updatedRoom.players[1].name).to.equal('Bob');
-             done();
-           }
-         });
+        player2.once('dab_roomInfo', (updatedRoom) => {
+          if (updatedRoom.players.length === 2) {
+            expect(updatedRoom.players[0].name).to.equal('Player 1');
+            expect(updatedRoom.players[1].name).to.equal('Bob');
+            done();
+          }
+        });
       });
     });
 
@@ -250,7 +250,7 @@ player2.once('dab_roomInfo', (updatedRoom) => {
       expect(roomInfo.horizontalLines[0][0]).to.equal(0);
     });
 
-    it('should reject move when not player\'s turn', async () => {
+    it("should reject move when not player's turn", async () => {
       const roomId = await setupRoom();
       await makeMove(player1, roomId, 'h', 0, 0);
 
@@ -524,7 +524,7 @@ player2.once('dab_roomInfo', (updatedRoom) => {
       player1.emit('dab_createRoom', { mode: 'custom', customRows: 3, customCols: 3, customPlayers: 3 });
       player1.once('dab_roomInfo', (room) => {
         expect(room.scores).to.have.lengthOf(3);
-        expect(room.scores.every(s => s === 0)).to.equal(true);
+        expect(room.scores.every((s) => s === 0)).to.equal(true);
         done();
       });
     });
@@ -567,7 +567,7 @@ player2.once('dab_roomInfo', (updatedRoom) => {
 
   describe('Player Disconnection During Game', () => {
     it('should emit dab_playerLeft when player disconnects', async () => {
-      const roomId = await setupRoom();
+      await setupRoom();
       const disconnectedId = player2.id;
 
       const playerLeftPromise = new Promise((resolve) => {
@@ -582,7 +582,7 @@ player2.once('dab_roomInfo', (updatedRoom) => {
     });
 
     it('should emit dab_gamePaused when only one player remains', async () => {
-      const roomId = await setupRoom();
+      await setupRoom();
 
       const pausedPromise = new Promise((resolve) => {
         player1.once('dab_gamePaused', resolve);
@@ -670,10 +670,10 @@ player2.once('dab_roomInfo', (updatedRoom) => {
       const room = await roomInfoPromise;
 
       // All lines should be null after restart
-      const hEmpty = room.horizontalLines.every(row => row.every(cell => cell === null));
-      const vEmpty = room.verticalLines.every(row => row.every(cell => cell === null));
-      const boxesEmpty = room.boxes.every(row => row.every(cell => cell === null));
-      const scoresZero = room.scores.every(s => s === 0);
+      const hEmpty = room.horizontalLines.every((row) => row.every((cell) => cell === null));
+      const vEmpty = room.verticalLines.every((row) => row.every((cell) => cell === null));
+      const boxesEmpty = room.boxes.every((row) => row.every((cell) => cell === null));
+      const scoresZero = room.scores.every((s) => s === 0);
 
       expect(hEmpty).to.equal(true);
       expect(vEmpty).to.equal(true);

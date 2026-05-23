@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import RoomLobby from './RoomLobby';
 
@@ -9,8 +9,12 @@ const players2 = [
 ];
 
 describe('RoomLobby', () => {
-  beforeEach(() => { vi.useFakeTimers(); });
-  afterEach(() => { vi.useRealTimers(); });
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it('displays the room code', () => {
     render(<RoomLobby roomId="ABC123" players={[]} isHost={true} onLeave={vi.fn()} />);
@@ -18,7 +22,9 @@ describe('RoomLobby', () => {
   });
 
   it('shows "Waiting for players" when below minPlayers', () => {
-    render(<RoomLobby roomId="X" players={[{ id: '1', name: 'Alice', connected: true }]} isHost={true} onLeave={vi.fn()} />);
+    render(
+      <RoomLobby roomId="X" players={[{ id: '1', name: 'Alice', connected: true }]} isHost={true} onLeave={vi.fn()} />,
+    );
     expect(screen.getByText(/Waiting for players/)).toBeTruthy();
   });
 
@@ -58,7 +64,16 @@ describe('RoomLobby', () => {
   });
 
   it('shows CountdownOverlay when showCountdown is true', () => {
-    render(<RoomLobby roomId="X" players={players2} isHost={true} onLeave={vi.fn()} showCountdown={true} onCountdownComplete={vi.fn()} />);
+    render(
+      <RoomLobby
+        roomId="X"
+        players={players2}
+        isHost={true}
+        onLeave={vi.fn()}
+        showCountdown={true}
+        onCountdownComplete={vi.fn()}
+      />,
+    );
     expect(screen.getByText('3')).toBeTruthy();
   });
 });

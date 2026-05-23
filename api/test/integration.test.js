@@ -1,5 +1,5 @@
 process.env.NODE_ENV = 'test';
-const { server, io } = require('../index');
+const { server } = require('../index');
 const client = require('socket.io-client');
 const { expect } = require('chai');
 
@@ -44,7 +44,7 @@ describe('Cross-Game Integration Tests', function () {
   describe('Room Isolation', () => {
     it('Bingo player should not receive Dab game events', (done) => {
       player1.emit('bingo_createRoom', 'Alice');
-      player1.once('bingo_roomInfo', (bingoRoom) => {
+      player1.once('bingo_roomInfo', (_bingoRoom) => {
         player2.emit('dab_createRoom', { mode: 'classic', playerName: 'Bob' });
         player2.once('dab_roomInfo', (dabRoom) => {
           const bingoGotDabEvent = new Promise((resolve) => {
@@ -184,7 +184,13 @@ describe('Cross-Game Integration Tests', function () {
 
     it('DAB game over should not affect UTTT games', async () => {
       const getDabRoom = new Promise((resolve) => {
-        player1.emit('dab_createRoom', { mode: 'custom', customRows: 2, customCols: 2, customPlayers: 2, playerName: 'P1' });
+        player1.emit('dab_createRoom', {
+          mode: 'custom',
+          customRows: 2,
+          customCols: 2,
+          customPlayers: 2,
+          playerName: 'P1',
+        });
         player1.once('dab_roomInfo', (room) => {
           player2.emit('dab_joinRoom', { roomId: room.id, playerName: 'P2' });
           player2.once('dab_gameStarted', () => resolve(room.id));
@@ -302,7 +308,6 @@ describe('Cross-Game Integration Tests', function () {
     it('should join room regardless of case', (done) => {
       player1.emit('ttt_createRoom', 'Alice');
       player1.once('ttt_roomInfo', (room) => {
-        const upperId = room.id.toUpperCase();
         const lowerId = room.id.toLowerCase();
         player2.emit('ttt_joinRoom', { roomId: lowerId, playerName: 'Bob' });
         player2.once('ttt_gameStarted', () => {

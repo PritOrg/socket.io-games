@@ -370,8 +370,6 @@ class DabManager extends BaseManager {
       room.currentTurn = this.getNextTurn(room);
     }
 
-    const currentPlayer = room.players[room.currentTurn];
-
     this.io.to(roomId).emit(`${this.gamePrefix}_moveResult`, {
       lineType,
       r,
@@ -471,11 +469,39 @@ class DabManager extends BaseManager {
     this.clearTimer(`forfeit_${room.id}`);
   }
 
+  handleDisconnect(socket) {
+    for (const [roomId, room] of this.rooms.entries()) {
+      const playerIndex = room.players.findIndex((p) => p.id === socket.id);
+      if (playerIndex === -1) continue;
+
+      room.players[playerIndex].connected = false;
+
+      if (room.gameState === 'playing') {
+        const activeCount = room.players.filter((p) => p.connected).length;
+
+        if (activeCount === 0) {
+          this.registerEmptyTimer(roomId, () => {
+            this.rooms.delete(roomId);
+          });
+        } else if (activeCount === 1) {
+          const canContinue = room.startedWithPlayers >= 4;
+          if (!canContinue) {
+            room.gameState = 'paused';
+            this.io.to(room.id).emit(`${this.gamePrefix}_gamePaused`, { reason: 'Opponent disconnected' });
+          }
+        }
+
+        this.io.to(room.id).emit(`${this.gamePrefix}_playerLeft`, { playerId: socket.id });
+        this.sendRoomInfo(room.id);
+      }
+    }
+  }
+
   sendRoomInfo(roomId) {
     const room = this.rooms.get(roomId);
     if (!room) return;
 
-    const { emptyTimer, forfeitTimer, ...sanitized } = room;
+    const { ...sanitized } = room;
     this.io.to(roomId).emit(`${this.gamePrefix}_roomInfo`, sanitized);
   }
 }
