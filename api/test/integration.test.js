@@ -38,7 +38,7 @@ describe('Cross-Game Integration Tests', function () {
     if (player2.connected) player2.disconnect();
     if (player3.connected) player3.disconnect();
     if (player4.connected) player4.disconnect();
-    done();
+    setTimeout(done, 100);
   });
 
   describe('Room Isolation', () => {

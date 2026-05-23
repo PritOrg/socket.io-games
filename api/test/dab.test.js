@@ -38,7 +38,7 @@ describe('Dots & Boxes (DAB) Game Logic', function () {
     if (player2.connected) player2.disconnect();
     if (player3.connected) player3.disconnect();
     if (player4.connected) player4.disconnect();
-    done();
+    setTimeout(done, 100);
   });
 
   function setupRoom(mode = 'custom', customRows = 3, customCols = 3, customPlayers = 2) {

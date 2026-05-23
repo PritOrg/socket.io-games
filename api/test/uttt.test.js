@@ -32,7 +32,7 @@ describe('Ultimate Tic-Tac-Toe (UTTT) Game Logic', function () {
   afterEach((done) => {
     if (player1.connected) player1.disconnect();
     if (player2.connected) player2.disconnect();
-    done();
+    setTimeout(done, 100);
   });
 
   describe('Room Lifecycle', () => {

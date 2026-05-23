@@ -36,7 +36,7 @@ describe('PaperParty Backend Tests', function () {
   afterEach((done) => {
     if (player1.connected) player1.disconnect();
     if (player2.connected) player2.disconnect();
-    done();
+    setTimeout(done, 100);
   });
 
   describe('Bingo Game Logic', () => {
