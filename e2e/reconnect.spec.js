@@ -7,6 +7,8 @@ test.describe('Reconnect E2E', () => {
     const page1 = await ctx.newPage();
     const page2 = await ctx.newPage();
 
+    await page1.goto('/');
+    await page2.goto('/');
     await setPlayerNames(page1, page2, 'Alpha', 'Beta');
 
     const roomCode = await createAndJoinRoom(page1, page2, '/tictactoe', 'Join', 'Create');
@@ -38,6 +40,8 @@ test.describe('Reconnect E2E', () => {
     const page1 = await ctx.newPage();
     const page2 = await ctx.newPage();
 
+    await page1.goto('/');
+    await page2.goto('/');
     await setPlayerNames(page1, page2, 'Xena', 'Odin');
 
     await createAndJoinRoom(page1, page2, '/tictactoe', 'Join', 'Create');

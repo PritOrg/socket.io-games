@@ -7,6 +7,8 @@ test.describe('UTTT E2E', () => {
     const page1 = await ctx.newPage();
     const page2 = await ctx.newPage();
 
+    await page1.goto('/');
+    await page2.goto('/');
     await setPlayerNames(page1, page2, 'Alpha', 'Beta');
 
     const roomCode = await createAndJoinRoom(page1, page2, '/uttt', 'Join Room', 'Create Room');
@@ -65,6 +67,8 @@ test.describe('UTTT E2E', () => {
     const page1 = await ctx.newPage();
     const page2 = await ctx.newPage();
 
+    await page1.goto('/');
+    await page2.goto('/');
     await setPlayerNames(page1, page2, 'A', 'B');
 
     await createAndJoinRoom(page1, page2, '/uttt', 'Join Room', 'Create Room');

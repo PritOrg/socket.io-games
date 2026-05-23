@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { setPlayerNames, navigateToGame, createAndJoinRoom } = require('./helpers');
+const { setPlayerName, setPlayerNames, navigateToGame, createAndJoinRoom } = require('./helpers');
 
 test.describe('DAB E2E', () => {
   test('create room, join, select mode, start game, draw lines', async ({ browser }) => {
@@ -7,6 +7,8 @@ test.describe('DAB E2E', () => {
     const page1 = await ctx.newPage();
     const page2 = await ctx.newPage();
 
+    await page1.goto('/');
+    await page2.goto('/');
     await setPlayerNames(page1, page2, 'Drawer', 'Liner');
 
     await createAndJoinRoom(page1, page2, '/dab', 'Join Room', 'Create Room');
@@ -66,9 +68,8 @@ test.describe('DAB E2E', () => {
   test('custom game mode selection before starting', async ({ browser }) => {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
-    await setPlayerName(page, 'Customizer');
-
     await navigateToGame(page, '/dab');
+    await setPlayerName(page, 'Customizer');
     await page.waitForTimeout(500);
 
     // Click Custom Size
@@ -82,7 +83,3 @@ test.describe('DAB E2E', () => {
     await ctx.close();
   });
 });
-
-async function setPlayerName(page, name) {
-  await page.evaluate((n) => localStorage.setItem('playerName', n), name);
-}
