@@ -21,7 +21,7 @@ describe('AvatarSelector', () => {
   it('calls onColorChange with clicked color', () => {
     const onColorChange = vi.fn();
     render(<AvatarSelector avatar="🐼" color="#2a2a3e" onAvatarChange={vi.fn()} onColorChange={onColorChange} />);
-    const colorBtns = screen.getAllByRole('button').filter(b => !b.textContent);
+    const colorBtns = screen.getAllByRole('button').filter((b) => !b.textContent);
     fireEvent.click(colorBtns[1]);
     expect(onColorChange).toHaveBeenCalled();
   });

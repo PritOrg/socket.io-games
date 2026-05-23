@@ -4,8 +4,11 @@ const STORAGE_KEY = 'player_avatar';
 
 const usePlayerAvatars = () => {
   const saved = (() => {
-    try { return JSON.parse(sessionStorage.getItem(STORAGE_KEY)) || {}; }
-    catch { return {}; }
+    try {
+      return JSON.parse(sessionStorage.getItem(STORAGE_KEY)) || {};
+    } catch {
+      return {};
+    }
   })();
 
   const [avatar, setAvatar] = useState(saved.avatar || '🐼');

@@ -8,7 +8,9 @@ vi.mock('sweetalert2', () => ({
 }));
 
 describe('LeaveButton', () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('renders a button', () => {
     render(<LeaveButton onLeave={vi.fn()} />);

@@ -3,7 +3,9 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import usePlayerAvatars from './usePlayerAvatars';
 
 describe('usePlayerAvatars', () => {
-  beforeEach(() => { sessionStorage.clear(); });
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
 
   it('returns default avatar and color on first use', () => {
     const { result } = renderHook(() => usePlayerAvatars());
@@ -13,7 +15,9 @@ describe('usePlayerAvatars', () => {
 
   it('persists avatar to sessionStorage when setAvatar is called', () => {
     const { result } = renderHook(() => usePlayerAvatars());
-    act(() => { result.current.setAvatar('🦊'); });
+    act(() => {
+      result.current.setAvatar('🦊');
+    });
     expect(result.current.avatar).toBe('🦊');
     const stored = JSON.parse(sessionStorage.getItem('player_avatar'));
     expect(stored.avatar).toBe('🦊');
@@ -21,7 +25,9 @@ describe('usePlayerAvatars', () => {
 
   it('persists color to sessionStorage when setColor is called', () => {
     const { result } = renderHook(() => usePlayerAvatars());
-    act(() => { result.current.setColor('#ff0000'); });
+    act(() => {
+      result.current.setColor('#ff0000');
+    });
     expect(result.current.color).toBe('#ff0000');
     const stored = JSON.parse(sessionStorage.getItem('player_avatar'));
     expect(stored.color).toBe('#ff0000');

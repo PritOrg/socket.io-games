@@ -5,9 +5,15 @@ Object.defineProperty(window, 'localStorage', {
     let store = {};
     return {
       getItem: (key) => store[key] ?? null,
-      setItem: (key, value) => { store[key] = String(value); },
-      removeItem: (key) => { delete store[key]; },
-      clear: () => { store = {}; },
+      setItem: (key, value) => {
+        store[key] = String(value);
+      },
+      removeItem: (key) => {
+        delete store[key];
+      },
+      clear: () => {
+        store = {};
+      },
     };
   })(),
 });
@@ -17,9 +23,15 @@ Object.defineProperty(window, 'sessionStorage', {
     let store = {};
     return {
       getItem: (key) => store[key] ?? null,
-      setItem: (key, value) => { store[key] = String(value); },
-      removeItem: (key) => { delete store[key]; },
-      clear: () => { store = {}; },
+      setItem: (key, value) => {
+        store[key] = String(value);
+      },
+      removeItem: (key) => {
+        delete store[key];
+      },
+      clear: () => {
+        store = {};
+      },
     };
   })(),
 });

@@ -51,9 +51,14 @@ class UTTTManager extends BaseManager {
 
   checkInnerWin(board) {
     const lines = [
-      [0, 1, 2], [3, 4, 5], [6, 7, 8],
-      [0, 3, 6], [1, 4, 7], [2, 5, 8],
-      [0, 4, 8], [2, 4, 6]
+      [0, 1, 2],
+      [3, 4, 5],
+      [6, 7, 8],
+      [0, 3, 6],
+      [1, 4, 7],
+      [2, 5, 8],
+      [0, 4, 8],
+      [2, 4, 6],
     ];
     for (const [a, b, c] of lines) {
       if (board[a] && board[a] === board[b] && board[a] === board[c]) {
@@ -65,13 +70,22 @@ class UTTTManager extends BaseManager {
 
   checkMacroWin(macroBoard) {
     const lines = [
-      [0, 1, 2], [3, 4, 5], [6, 7, 8],
-      [0, 3, 6], [1, 4, 7], [2, 5, 8],
-      [0, 4, 8], [2, 4, 6]
+      [0, 1, 2],
+      [3, 4, 5],
+      [6, 7, 8],
+      [0, 3, 6],
+      [1, 4, 7],
+      [2, 5, 8],
+      [0, 4, 8],
+      [2, 4, 6],
     ];
     for (const [a, b, c] of lines) {
-      if (macroBoard[a] && macroBoard[a] !== 'DEAD' &&
-          macroBoard[a] === macroBoard[b] && macroBoard[a] === macroBoard[c]) {
+      if (
+        macroBoard[a] &&
+        macroBoard[a] !== 'DEAD' &&
+        macroBoard[a] === macroBoard[b] &&
+        macroBoard[a] === macroBoard[c]
+      ) {
         return { winner: macroBoard[a], line: [a, b, c] };
       }
     }
@@ -87,12 +101,14 @@ class UTTTManager extends BaseManager {
       symbols: { [socket.id]: 'X' },
       currentTurn: null,
       gameState: 'waiting',
-      board: Array(9).fill(null).map(() => Array(9).fill(null)),
+      board: Array(9)
+        .fill(null)
+        .map(() => Array(9).fill(null)),
       macroBoard: Array(9).fill(null),
       activeGrid: null,
       scores: { X: 0, O: 0 },
       wonGrids: new Set(),
-      lastMove: null
+      lastMove: null,
     };
     this.rooms.set(roomId, room);
     logger.success('UTTT', `Room created: ${roomId} by ${playerName} (${socket.id})`);
@@ -133,7 +149,9 @@ class UTTTManager extends BaseManager {
     const room = this.rooms.get(roomIdSanitized);
     if (!room) return;
 
-    room.board = Array(9).fill(null).map(() => Array(9).fill(null));
+    room.board = Array(9)
+      .fill(null)
+      .map(() => Array(9).fill(null));
     room.macroBoard = Array(9).fill(null);
     room.activeGrid = null;
     room.scores = { X: 0, O: 0 };
@@ -183,7 +201,7 @@ class UTTTManager extends BaseManager {
     }
 
     const symbol = room.symbols[socket.id];
-    const player = room.players.find(p => p.id === socket.id);
+    const player = room.players.find((p) => p.id === socket.id);
 
     room.board[gridIndex][squareIndex] = symbol;
     logger.info('UTTT', `Move: ${player?.name} (${symbol}) played [${gridIndex},${squareIndex}] in ${roomId}`);
@@ -193,10 +211,13 @@ class UTTTManager extends BaseManager {
       room.macroBoard[gridIndex] = innerResult.winner;
       room.scores[innerResult.winner]++;
       room.wonGrids.add(gridIndex);
-      logger.info('UTTT', `Inner win: Grid ${gridIndex} won by ${innerResult.winner}! Score: X=${room.scores.X}, O=${room.scores.O}`);
+      logger.info(
+        'UTTT',
+        `Inner win: Grid ${gridIndex} won by ${innerResult.winner}! Score: X=${room.scores.X}, O=${room.scores.O}`,
+      );
     }
 
-    const isGridFull = room.board[gridIndex].every(cell => cell !== null);
+    const isGridFull = room.board[gridIndex].every((cell) => cell !== null);
     if (isGridFull && !room.macroBoard[gridIndex]) {
       room.macroBoard[gridIndex] = 'DEAD';
     }
@@ -204,36 +225,40 @@ class UTTTManager extends BaseManager {
     const macroResult = this.checkMacroWin(room.macroBoard);
     if (macroResult) {
       room.gameState = 'ended';
-      const winnerPlayer = room.players.find(p => room.symbols[p.id] === symbol);
+      const winnerPlayer = room.players.find((p) => room.symbols[p.id] === symbol);
       logger.success('UTTT', `GAME OVER! ${symbol} wins by macro in ${roomId}!`);
       this.io.to(room.id).emit(`${this.gamePrefix}_gameOver`, {
         winner: winnerPlayer?.id || socket.id,
         symbol,
         scores: room.scores,
         reason: 'macro_win',
-        winningLine: macroResult.line
+        winningLine: macroResult.line,
       });
       this.sendRoomInfo(room.id);
       return;
     }
 
-    if (room.board.every(grid => grid.every(cell => cell !== null))) {
+    if (room.board.every((grid) => grid.every((cell) => cell !== null))) {
       room.gameState = 'ended';
-      const winnerSymbol = room.scores.X > room.scores.O ? 'X' : (room.scores.O > room.scores.X ? 'O' : 'TIE');
-      const winnerPlayer = winnerSymbol === 'TIE' ? null : room.players.find(p => room.symbols[p.id] === winnerSymbol);
-      logger.success('UTTT', `GAME OVER! Tiebreaker - ${winnerSymbol} wins (${room.scores.X}-${room.scores.O}) in ${roomId}`);
+      const winnerSymbol = room.scores.X > room.scores.O ? 'X' : room.scores.O > room.scores.X ? 'O' : 'TIE';
+      const winnerPlayer =
+        winnerSymbol === 'TIE' ? null : room.players.find((p) => room.symbols[p.id] === winnerSymbol);
+      logger.success(
+        'UTTT',
+        `GAME OVER! Tiebreaker - ${winnerSymbol} wins (${room.scores.X}-${room.scores.O}) in ${roomId}`,
+      );
       this.io.to(room.id).emit(`${this.gamePrefix}_gameOver`, {
         winner: winnerPlayer?.id || null,
         symbol: winnerSymbol,
         scores: room.scores,
-        reason: 'tiebreaker'
+        reason: 'tiebreaker',
       });
       this.sendRoomInfo(room.id);
       return;
     }
 
     const nextGrid = squareIndex;
-    const isNextGridFull = room.board[nextGrid].every(cell => cell !== null);
+    const isNextGridFull = room.board[nextGrid].every((cell) => cell !== null);
 
     if (isNextGridFull) {
       room.activeGrid = null;
@@ -242,7 +267,7 @@ class UTTTManager extends BaseManager {
     }
 
     room.lastMove = { gridIndex, squareIndex };
-    room.currentTurn = room.players.find(p => p.id !== socket.id).id;
+    room.currentTurn = room.players.find((p) => p.id !== socket.id).id;
 
     logger.debug('UTTT', `Next turn: ${room.currentTurn}, Active grid: ${room.activeGrid}`);
     this.emitGameState(room.id);
@@ -261,20 +286,20 @@ class UTTTManager extends BaseManager {
       macroBoard: room.macroBoard,
       activeGrid: room.activeGrid,
       scores: room.scores,
-      lastMove: room.lastMove
+      lastMove: room.lastMove,
     };
     this.io.to(roomId).emit(`${this.gamePrefix}_gameState`, cleanRoom);
   }
 
   handleDisconnect(socket) {
     for (const [roomId, room] of this.rooms.entries()) {
-      const playerIndex = room.players.findIndex(p => p.id === socket.id);
+      const playerIndex = room.players.findIndex((p) => p.id === socket.id);
       if (playerIndex === -1) continue;
 
       room.players[playerIndex].connected = false;
 
       if (room.gameState === 'playing') {
-        const activeCount = room.players.filter(p => p.connected).length;
+        const activeCount = room.players.filter((p) => p.connected).length;
 
         if (activeCount === 0) {
           this.registerEmptyTimer(roomId, () => {
@@ -297,13 +322,13 @@ class UTTTManager extends BaseManager {
     const room = this.rooms.get(roomIdSanitized);
     if (!room) return;
 
-    const playerIndex = room.players.findIndex(p => p.id === socket.id);
+    const playerIndex = room.players.findIndex((p) => p.id === socket.id);
     if (playerIndex === -1) return;
 
     room.players[playerIndex].connected = false;
 
     if (room.gameState === 'playing') {
-      const activeCount = room.players.filter(p => p.connected).length;
+      const activeCount = room.players.filter((p) => p.connected).length;
 
       if (activeCount === 0) {
         this.registerEmptyTimer(roomId, () => {
@@ -327,7 +352,7 @@ class UTTTManager extends BaseManager {
       return;
     }
 
-    const player = room.players.find(p => p.id === playerId);
+    const player = room.players.find((p) => p.id === playerId);
     if (!player) {
       socket.emit(`${this.gamePrefix}_error`, { message: 'Player not found' });
       return;
@@ -340,14 +365,14 @@ class UTTTManager extends BaseManager {
     this.clearTimer(`empty_${roomId}`);
 
     if (room.gameState === 'paused') {
-      const activeCount = room.players.filter(p => p.connected).length;
+      const activeCount = room.players.filter((p) => p.connected).length;
       if (activeCount >= 2) {
         room.gameState = 'playing';
         this.clearTimer(`forfeit_${roomId}`);
         this.io.to(room.id).emit(`${this.gamePrefix}_alert`, {
           icon: 'success',
           title: 'Player Reconnected',
-          text: 'Game resumed!'
+          text: 'Game resumed!',
         });
       }
     }
@@ -368,7 +393,7 @@ class UTTTManager extends BaseManager {
       macroBoard: room.macroBoard,
       activeGrid: room.activeGrid,
       scores: room.scores,
-      lastMove: room.lastMove
+      lastMove: room.lastMove,
     };
     this.io.to(roomId).emit(`${this.gamePrefix}_roomInfo`, cleanRoom);
   }

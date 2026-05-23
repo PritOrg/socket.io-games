@@ -58,17 +58,21 @@ const RoomLobby = ({
           {canStart ? (
             <span className="paper-font text-green-700 font-semibold">✅ Ready to start!</span>
           ) : (
-            <span className="paper-font text-ink/70">
-              Waiting for players{dots}
-            </span>
+            <span className="paper-font text-ink/70">Waiting for players{dots}</span>
           )}
         </div>
 
         {/* Player ready checklist */}
         <div className="space-y-2">
-          <p className="paper-font text-sm text-ink/60">Players ({players.length}/{minPlayers} min)</p>
+          <p className="paper-font text-sm text-ink/60">
+            Players ({players.length}/{minPlayers} min)
+          </p>
           {players.map((p, i) => (
-            <div key={p.id || i} className="flex items-center gap-2 player-badge" style={{ transform: 'none', border: 'none', padding: '0.25rem 0' }}>
+            <div
+              key={p.id || i}
+              className="flex items-center gap-2 player-badge"
+              style={{ transform: 'none', border: 'none', padding: '0.25rem 0' }}
+            >
               <span className="text-lg">{p.connected !== false ? '☑️' : '☐'}</span>
               <span className="paper-font text-ink">{p.name}</span>
               {i === 0 && <span className="text-xs text-ink/50 ml-auto paper-font">host</span>}
@@ -103,11 +107,7 @@ const RoomLobby = ({
             </SketchButton>
           )}
 
-          {!isHost && (
-            <p className="paper-font text-center text-sm text-ink/50">
-              Waiting for host to start…
-            </p>
-          )}
+          {!isHost && <p className="paper-font text-center text-sm text-ink/50">Waiting for host to start…</p>}
 
           <SketchButton onClick={onLeave} className="w-full" style={{ background: '#fff0f0' }}>
             Leave Room

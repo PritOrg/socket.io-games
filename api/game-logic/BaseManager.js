@@ -31,17 +31,23 @@ class BaseManager {
   registerEmptyTimer(roomId, callback) {
     const timerKey = `empty_${roomId}`;
     this.clearTimer(timerKey);
-    this.timers.set(timerKey, setTimeout(() => {
-      callback();
-      this.rooms.delete(roomId);
-    }, 5 * 60 * 1000));
+    this.timers.set(
+      timerKey,
+      setTimeout(
+        () => {
+          callback();
+          this.rooms.delete(roomId);
+        },
+        5 * 60 * 1000,
+      ),
+    );
   }
 
   handlePlayerLeave(socket, roomId, callbacks) {
     const room = this.rooms.get(roomId);
     if (!room) return;
 
-    const player = room.players.find(p => p.id === socket.id);
+    const player = room.players.find((p) => p.id === socket.id);
     if (!player) return;
 
     player.connected = false;
@@ -55,7 +61,7 @@ class BaseManager {
       return;
     }
 
-    const player = room.players.find(p => p.id === playerId);
+    const player = room.players.find((p) => p.id === playerId);
     if (!player) {
       if (roomCallbacks?.onPlayerNotFound) roomCallbacks.onPlayerNotFound(socket, gamePrefix);
       return;
@@ -70,7 +76,7 @@ class BaseManager {
     this.clearTimer(`empty_${roomId}`);
 
     if (room.gameState === 'paused' && roomCallbacks?.onResume) {
-      const activeCount = room.players.filter(p => p.connected).length;
+      const activeCount = room.players.filter((p) => p.connected).length;
       if (activeCount >= 2) {
         room.gameState = 'playing';
         if (room.forfeitTimer) {
@@ -80,7 +86,7 @@ class BaseManager {
         this.io.to(room.id).emit(`${gamePrefix}_alert`, {
           icon: 'success',
           title: 'Player Reconnected',
-          text: 'Game resumed!'
+          text: 'Game resumed!',
         });
       }
     }

@@ -3,7 +3,14 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import ModeSelector from './ModeSelector';
 
-const defaults = { mode: 'classic', onModeChange: vi.fn(), customRows: 5, customCols: 5, onRowsChange: vi.fn(), onColsChange: vi.fn() };
+const defaults = {
+  mode: 'classic',
+  onModeChange: vi.fn(),
+  customRows: 5,
+  customCols: 5,
+  onRowsChange: vi.fn(),
+  onColsChange: vi.fn(),
+};
 
 describe('ModeSelector', () => {
   it('renders Classic and Custom buttons', () => {

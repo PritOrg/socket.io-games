@@ -19,10 +19,7 @@ const LeaveButton = ({ onLeave, className = '' }) => {
   };
 
   return (
-    <button
-      onClick={handleClick}
-      className={`sketch-button text-red-600 hover:bg-red-50 ${className}`}
-    >
+    <button onClick={handleClick} className={`sketch-button text-red-600 hover:bg-red-50 ${className}`}>
       <ArrowLeft className="inline" size={20} />
     </button>
   );

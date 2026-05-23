@@ -6,9 +6,7 @@ const ModeSelector = ({ mode, onModeChange, customRows, customCols, onRowsChange
     <div className="sketch-border">
       <div className="flex items-center gap-2 mb-3">
         <SwatchBook size={20} className="text-ink" />
-        <span className="font-handwriting text-lg text-ink">
-          Game Mode
-        </span>
+        <span className="font-handwriting text-lg text-ink">Game Mode</span>
       </div>
       <div className="flex gap-3 mb-4">
         <button
@@ -27,9 +25,7 @@ const ModeSelector = ({ mode, onModeChange, customRows, customCols, onRowsChange
       {mode === 'custom' && (
         <div className="space-y-3 pt-3 border-t-2 border-dashed border-ink/20">
           <div>
-            <label className="font-handwriting text-ink block mb-1">
-              Rows: {customRows}
-            </label>
+            <label className="font-handwriting text-ink block mb-1">Rows: {customRows}</label>
             <input
               type="range"
               min="3"
@@ -40,9 +36,7 @@ const ModeSelector = ({ mode, onModeChange, customRows, customCols, onRowsChange
             />
           </div>
           <div>
-            <label className="font-handwriting text-ink block mb-1">
-              Columns: {customCols}
-            </label>
+            <label className="font-handwriting text-ink block mb-1">Columns: {customCols}</label>
             <input
               type="range"
               min="3"

@@ -5,15 +5,21 @@ import Swal from 'sweetalert2';
 const useGameHandlers = (socket, roomId, gamePrefix) => {
   const navigate = useNavigate();
 
-  const handleCreateRoom = useCallback((options) => {
-    if (!socket) return;
-    socket.emit(`${gamePrefix}_createRoom`, options);
-  }, [socket, gamePrefix]);
+  const handleCreateRoom = useCallback(
+    (options) => {
+      if (!socket) return;
+      socket.emit(`${gamePrefix}_createRoom`, options);
+    },
+    [socket, gamePrefix],
+  );
 
-  const handleJoinRoom = useCallback((options) => {
-    if (!socket) return;
-    socket.emit(`${gamePrefix}_joinRoom`, options);
-  }, [socket, gamePrefix]);
+  const handleJoinRoom = useCallback(
+    (options) => {
+      if (!socket) return;
+      socket.emit(`${gamePrefix}_joinRoom`, options);
+    },
+    [socket, gamePrefix],
+  );
 
   const handleStartGame = useCallback(() => {
     if (!socket) return;

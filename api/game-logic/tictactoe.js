@@ -1,25 +1,23 @@
-const BaseManager = require("./BaseManager");
+const BaseManager = require('./BaseManager');
 
 class TicTacToeManager extends BaseManager {
   constructor(io) {
     super(io);
-    this.gamePrefix = "ttt";
+    this.gamePrefix = 'ttt';
   }
 
   handleConnection(socket) {
-    socket.on("ttt_createRoom", (playerName) =>
-      this.createRoom(socket, playerName),
-    );
-    socket.on("ttt_joinRoom", (data) => this.joinRoom(socket, data));
-    socket.on("ttt_makeMove", (data) => this.makeMove(socket, data));
-    socket.on("ttt_restartGame", (roomId) => this.restartGame(socket, roomId));
-    socket.on("ttt_leaveRoom", (roomId) => this.leaveRoom(socket, roomId));
-    socket.on("ttt_reconnect", (data) => this.reconnect(socket, data));
-    socket.on("ttt_requestRoomInfo", (roomId) => {
+    socket.on('ttt_createRoom', (playerName) => this.createRoom(socket, playerName));
+    socket.on('ttt_joinRoom', (data) => this.joinRoom(socket, data));
+    socket.on('ttt_makeMove', (data) => this.makeMove(socket, data));
+    socket.on('ttt_restartGame', (roomId) => this.restartGame(socket, roomId));
+    socket.on('ttt_leaveRoom', (roomId) => this.leaveRoom(socket, roomId));
+    socket.on('ttt_reconnect', (data) => this.reconnect(socket, data));
+    socket.on('ttt_requestRoomInfo', (roomId) => {
       const sanitized = this.sanitizeRoomId(roomId);
       if (sanitized) this.sendRoomInfo(sanitized);
     });
-    socket.on("disconnect", () => this.handleDisconnect(socket));
+    socket.on('disconnect', () => this.handleDisconnect(socket));
   }
 
   checkWinner(board) {
@@ -49,7 +47,7 @@ class TicTacToeManager extends BaseManager {
       id: roomId,
       players: [{ id: socket.id, name: playerName, connected: true }],
       board: Array(9).fill(null),
-      gameState: "waiting",
+      gameState: 'waiting',
       currentTurn: null,
       emptyTimer: null,
       forfeitTimer: null,
@@ -63,16 +61,16 @@ class TicTacToeManager extends BaseManager {
     const room = this.rooms.get(roomIdSanitized);
     if (!room || room.players.length >= 2) {
       socket.emit(`${this.gamePrefix}_alert`, {
-        icon: "error",
-        title: "Error",
-        text: room ? "Room full" : "Not found",
+        icon: 'error',
+        title: 'Error',
+        text: room ? 'Room full' : 'Not found',
       });
       return;
     }
 
     socket.join(room.id);
     room.players.push({ id: socket.id, name: playerName, connected: true });
-    room.gameState = "playing";
+    room.gameState = 'playing';
     room.currentTurn = room.players[0].id;
 
     this.clearTimer(`empty_${roomId}`);
@@ -88,6 +86,7 @@ class TicTacToeManager extends BaseManager {
     const playerIndex = room.players.findIndex((p) => p.id === socket.id);
     const symbol = playerIndex === 0 ? 'X' : 'O';
 
+    if (position < 0 || position > 8) return;
     if (room.board[position] === null) {
       room.board[position] = symbol;
       this.io.to(sanitizedRoomId).emit(`${this.gamePrefix}_moveMade`, { position, symbol, board: room.board });
@@ -98,7 +97,9 @@ class TicTacToeManager extends BaseManager {
         if (result.draw) {
           this.io.to(sanitizedRoomId).emit(`${this.gamePrefix}_gameDraw`);
         } else {
-          this.io.to(sanitizedRoomId).emit(`${this.gamePrefix}_gameWon`, { winner: socket.id, winningLine: result.line });
+          this.io
+            .to(sanitizedRoomId)
+            .emit(`${this.gamePrefix}_gameWon`, { winner: socket.id, winningLine: result.line });
         }
       } else {
         room.currentTurn = room.players.find((p) => p.id !== socket.id).id;
@@ -112,7 +113,7 @@ class TicTacToeManager extends BaseManager {
     const room = this.rooms.get(roomIdSanitized);
     if (!room) return;
     room.board = Array(9).fill(null);
-    room.gameState = "playing";
+    room.gameState = 'playing';
     room.currentTurn = room.players[0].id;
     this.io.to(roomIdSanitized).emit(`${this.gamePrefix}_gameRestarted`);
     this.sendRoomInfo(roomIdSanitized);
@@ -128,7 +129,7 @@ class TicTacToeManager extends BaseManager {
 
     room.players[playerIndex].connected = false;
 
-    if (room.gameState === "playing") {
+    if (room.gameState === 'playing') {
       const activeCount = room.players.filter((p) => p.connected).length;
 
       if (activeCount === 0) {
@@ -136,17 +137,13 @@ class TicTacToeManager extends BaseManager {
           this.rooms.delete(roomIdSanitized);
         });
       } else if (activeCount === 1) {
-        room.gameState = "paused";
-        this.io
-          .to(room.id)
-          .emit(`${this.gamePrefix}_gamePaused`, {
-            reason: "Opponent disconnected",
-          });
+        room.gameState = 'paused';
+        this.io.to(room.id).emit(`${this.gamePrefix}_gamePaused`, {
+          reason: 'Opponent disconnected',
+        });
       }
 
-      this.io
-        .to(room.id)
-        .emit(`${this.gamePrefix}_playerLeft`, { playerId: socket.id });
+      this.io.to(room.id).emit(`${this.gamePrefix}_playerLeft`, { playerId: socket.id });
       this.sendRoomInfo(room.id);
     }
   }
@@ -171,18 +168,16 @@ class TicTacToeManager extends BaseManager {
 
     this.clearTimer(`empty_${roomIdSanitized}`);
 
-    if (room.gameState === "paused") {
+    if (room.gameState === 'paused') {
       const activeCount = room.players.filter((p) => p.connected).length;
       if (activeCount >= 2) {
-        room.gameState = "playing";
+        room.gameState = 'playing';
         this.clearTimer(`forfeit_${roomIdSanitized}`);
-        this.io
-          .to(room.id)
-          .emit(`${this.gamePrefix}_alert`, {
-            icon: "success",
-            title: "Player Reconnected",
-            text: "Game resumed!",
-          });
+        this.io.to(room.id).emit(`${this.gamePrefix}_alert`, {
+          icon: 'success',
+          title: 'Player Reconnected',
+          text: 'Game resumed!',
+        });
       }
     }
 
@@ -196,7 +191,7 @@ class TicTacToeManager extends BaseManager {
 
       room.players[playerIndex].connected = false;
 
-      if (room.gameState === "playing") {
+      if (room.gameState === 'playing') {
         const activeCount = room.players.filter((p) => p.connected).length;
 
         if (activeCount === 0) {
@@ -204,17 +199,13 @@ class TicTacToeManager extends BaseManager {
             this.rooms.delete(roomId);
           });
         } else if (activeCount === 1) {
-          room.gameState = "paused";
-          this.io
-            .to(room.id)
-            .emit(`${this.gamePrefix}_gamePaused`, {
-              reason: "Opponent disconnected",
-            });
+          room.gameState = 'paused';
+          this.io.to(room.id).emit(`${this.gamePrefix}_gamePaused`, {
+            reason: 'Opponent disconnected',
+          });
         }
 
-        this.io
-          .to(room.id)
-          .emit(`${this.gamePrefix}_playerLeft`, { playerId: socket.id });
+        this.io.to(room.id).emit(`${this.gamePrefix}_playerLeft`, { playerId: socket.id });
         this.sendRoomInfo(room.id);
       }
     }

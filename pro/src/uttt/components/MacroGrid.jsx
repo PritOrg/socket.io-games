@@ -31,18 +31,20 @@ const MacroGrid = ({ board, macroBoard, activeGrid, lastMove, onCellClick }) => 
   return (
     <div className={`${getContainerClasses()} p-1.5 sm:p-2 md:p-3 overflow-hidden`}>
       <div className="relative grid grid-cols-3 gap-1 sm:gap-1.5 md:gap-2">
-        {Array(9).fill(null).map((_, gridIndex) => (
-          <InnerGrid
-            key={gridIndex}
-            gridIndex={gridIndex}
-            gridData={board[gridIndex]}
-            macroWinner={macroBoard[gridIndex]}
-            isActive={activeGrid === null || activeGrid === gridIndex || macroBoard[gridIndex] === 'DEAD'}
-            isLastMoveGrid={lastMove?.gridIndex === gridIndex}
-            lastMoveSquare={lastMove?.gridIndex === gridIndex ? lastMove?.squareIndex : null}
-            onSquareClick={(squareIndex) => onCellClick(gridIndex, squareIndex)}
-          />
-        ))}
+        {Array(9)
+          .fill(null)
+          .map((_, gridIndex) => (
+            <InnerGrid
+              key={gridIndex}
+              gridIndex={gridIndex}
+              gridData={board[gridIndex]}
+              macroWinner={macroBoard[gridIndex]}
+              isActive={activeGrid === null || activeGrid === gridIndex || macroBoard[gridIndex] === 'DEAD'}
+              isLastMoveGrid={lastMove?.gridIndex === gridIndex}
+              lastMoveSquare={lastMove?.gridIndex === gridIndex ? lastMove?.squareIndex : null}
+              onSquareClick={(squareIndex) => onCellClick(gridIndex, squareIndex)}
+            />
+          ))}
         {renderGridLines()}
       </div>
 

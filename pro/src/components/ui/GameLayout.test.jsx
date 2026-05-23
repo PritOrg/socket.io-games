@@ -24,7 +24,7 @@ const renderLayout = (props = {}) =>
       <GameLayout socket={mockSocket} roomId="ABC123" gamePrefix="ttt" {...props}>
         <div data-testid="game-content">Board</div>
       </GameLayout>
-    </BrowserRouter>
+    </BrowserRouter>,
   );
 
 describe('GameLayout', () => {

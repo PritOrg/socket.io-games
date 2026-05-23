@@ -1,23 +1,19 @@
-const { v4: uuidv4 } = require("uuid");
-const BaseManager = require("./BaseManager");
+const { v4: uuidv4 } = require('uuid');
+const BaseManager = require('./BaseManager');
 
 class BingoManager extends BaseManager {
   constructor(io) {
     super(io);
-    this.gamePrefix = "bingo";
+    this.gamePrefix = 'bingo';
   }
 
   handleConnection(socket) {
-    socket.on(`${this.gamePrefix}_createRoom`, (creatorName) =>
-      this.createRoom(socket, creatorName),
-    );
+    socket.on(`${this.gamePrefix}_createRoom`, (creatorName) => this.createRoom(socket, creatorName));
     socket.on(`${this.gamePrefix}_joinRoom`, (data) => this.joinRoom(socket, data));
     socket.on(`${this.gamePrefix}_startGame`, (roomId) => this.startGame(socket, roomId));
     socket.on(`${this.gamePrefix}_markNumber`, (data) => this.markNumber(socket, data));
     socket.on(`${this.gamePrefix}_achieved`, (roomId) => this.bingoAchieved(socket, roomId));
-    socket.on(`${this.gamePrefix}_restartGame`, (roomId) =>
-      this.restartGame(socket, roomId),
-    );
+    socket.on(`${this.gamePrefix}_restartGame`, (roomId) => this.restartGame(socket, roomId));
     socket.on(`${this.gamePrefix}_leaveRoom`, (roomId) => this.leaveRoom(socket, roomId));
     socket.on(`${this.gamePrefix}_reconnect`, (data) => this.reconnect(socket, data));
     socket.on(`${this.gamePrefix}_requestRoomInfo`, (roomId) => {
@@ -36,7 +32,7 @@ class BingoManager extends BaseManager {
       players: [{ id: socket.id, name: creatorName }],
       currentTurn: null,
       turnOrder: [socket.id],
-      gameState: "waiting",
+      gameState: 'waiting',
       strikedNumbers: [],
       markedNumbers: {},
       playerBoards: {},
@@ -44,8 +40,8 @@ class BingoManager extends BaseManager {
     this.rooms.set(roomId, room);
     this.sendRoomInfo(roomId);
     socket.emit(`${this.gamePrefix}_alert`, {
-      icon: "success",
-      title: "Room Created",
+      icon: 'success',
+      title: 'Room Created',
       text: `Bingo Room ${roomId}`,
     });
   }
@@ -54,26 +50,26 @@ class BingoManager extends BaseManager {
     const sanitizedRoomId = this.sanitizeRoomId(roomId);
     if (!sanitizedRoomId) {
       socket.emit(`${this.gamePrefix}_alert`, {
-        icon: "warning",
-        title: "Error",
-        text: "Invalid room ID",
+        icon: 'warning',
+        title: 'Error',
+        text: 'Invalid room ID',
       });
       return;
     }
     const room = this.rooms.get(sanitizedRoomId);
     if (!room) {
       socket.emit(`${this.gamePrefix}_alert`, {
-        icon: "warning",
-        title: "Error",
-        text: "Room not found",
+        icon: 'warning',
+        title: 'Error',
+        text: 'Room not found',
       });
       return;
     }
     if (room.players.length >= 10) {
       socket.emit(`${this.gamePrefix}_alert`, {
-        icon: "warning",
-        title: "Full",
-        text: "Room is full",
+        icon: 'warning',
+        title: 'Full',
+        text: 'Room is full',
       });
       return;
     }
@@ -82,8 +78,8 @@ class BingoManager extends BaseManager {
     room.players.push({ id: socket.id, name: playerName });
     room.turnOrder.push(socket.id);
 
-    if (room.players.length >= 2 && room.gameState === "waiting") {
-      room.gameState = "ready";
+    if (room.players.length >= 2 && room.gameState === 'waiting') {
+      room.gameState = 'ready';
       room.currentTurn = room.players[0].id;
     }
 
@@ -96,15 +92,15 @@ class BingoManager extends BaseManager {
     if (!room || room.creator !== socket.id) return;
     if (room.players.length < 2) {
       socket.emit(`${this.gamePrefix}_alert`, {
-        icon: "warning",
-        title: "Wait",
-        text: "Need at least 2 players!",
+        icon: 'warning',
+        title: 'Wait',
+        text: 'Need at least 2 players!',
       });
       return;
     }
-    if (room.gameState !== "ready") return;
+    if (room.gameState !== 'ready') return;
 
-    room.gameState = "playing";
+    room.gameState = 'playing';
     const firstPlayerId = room.turnOrder[0];
     room.currentTurn = firstPlayerId;
 
@@ -117,12 +113,10 @@ class BingoManager extends BaseManager {
       room.playerBoards[player.id] = nums;
     });
 
-    this.io
-      .to(sanitizedRoomId)
-      .emit(`${this.gamePrefix}_gameStarted`, {
-        firstPlayerId,
-        playerBoards: room.playerBoards,
-      });
+    this.io.to(sanitizedRoomId).emit(`${this.gamePrefix}_gameStarted`, {
+      firstPlayerId,
+      playerBoards: room.playerBoards,
+    });
     this.sendRoomInfo(sanitizedRoomId);
   }
 
@@ -130,7 +124,7 @@ class BingoManager extends BaseManager {
     const sanitizedRoomId = this.sanitizeRoomId(roomId);
     const room = this.rooms.get(sanitizedRoomId);
     if (!room || room.creator !== socket.id) return;
-    room.gameState = "ready";
+    room.gameState = 'ready';
     room.currentTurn = room.players[0].id;
     room.strikedNumbers = [];
     room.markedNumbers = {};
@@ -142,22 +136,22 @@ class BingoManager extends BaseManager {
   markNumber(socket, { roomId, number }) {
     const roomIdSanitized = this.sanitizeRoomId(roomId);
     const room = this.rooms.get(roomIdSanitized);
-    if (!room || room.gameState !== "playing") return;
+    if (!room || room.gameState !== 'playing') return;
     if (room.currentTurn !== socket.id) return;
 
     if (!Number.isInteger(number) || number < 1 || number > 25) {
       socket.emit(`${this.gamePrefix}_alert`, {
-        icon: "error",
-        title: "Invalid Number",
-        text: "Number must be between 1 and 25",
+        icon: 'error',
+        title: 'Invalid Number',
+        text: 'Number must be between 1 and 25',
       });
       return;
     }
 
     if (room.strikedNumbers.includes(number)) {
       socket.emit(`${this.gamePrefix}_alert`, {
-        icon: "error",
-        title: "Already Called",
+        icon: 'error',
+        title: 'Already Called',
         text: `${number} was already called`,
       });
       return;
@@ -181,29 +175,25 @@ class BingoManager extends BaseManager {
       nextTurn: room.currentTurn,
       strikedNumbers: room.strikedNumbers,
     });
-    this.io
-      .to(roomIdSanitized)
-      .emit(`${this.gamePrefix}_nextTurn`, {
-        nextPlayerId: room.currentTurn,
-        timestamp,
-      });
+    this.io.to(roomIdSanitized).emit(`${this.gamePrefix}_nextTurn`, {
+      nextPlayerId: room.currentTurn,
+      timestamp,
+    });
 
     // Clear existing turn timer and set new one
     this.clearTimer(`turn_${roomIdSanitized}`);
 
     const timer = setTimeout(() => {
       const currentRoom = this.rooms.get(roomIdSanitized);
-      if (currentRoom && currentRoom.gameState === "playing") {
+      if (currentRoom && currentRoom.gameState === 'playing') {
         const idx = currentRoom.turnOrder.indexOf(currentRoom.currentTurn);
         const nextIdx = (idx + 1) % currentRoom.turnOrder.length;
         currentRoom.currentTurn = currentRoom.turnOrder[nextIdx];
         const timeoutTimestamp = Date.now();
-        this.io
-          .to(roomIdSanitized)
-          .emit(`${this.gamePrefix}_nextTurn`, {
-            nextPlayerId: currentRoom.currentTurn,
-            timestamp: timeoutTimestamp,
-          });
+        this.io.to(roomIdSanitized).emit(`${this.gamePrefix}_nextTurn`, {
+          nextPlayerId: currentRoom.currentTurn,
+          timestamp: timeoutTimestamp,
+        });
         this.sendRoomInfo(roomIdSanitized);
       }
     }, 30000);
@@ -214,14 +204,14 @@ class BingoManager extends BaseManager {
   bingoAchieved(socket, roomId) {
     const sanitizedRoomId = this.sanitizeRoomId(roomId);
     const room = this.rooms.get(sanitizedRoomId);
-    if (!room || room.gameState !== "playing") return;
+    if (!room || room.gameState !== 'playing') return;
 
     const playerBoard = room.playerBoards[socket.id];
     if (!playerBoard) {
       socket.emit(`${this.gamePrefix}_alert`, {
-        icon: "error",
-        title: "Error",
-        text: "Player board not found",
+        icon: 'error',
+        title: 'Error',
+        text: 'Player board not found',
       });
       return;
     }
@@ -241,19 +231,17 @@ class BingoManager extends BaseManager {
       [4, 8, 12, 16, 20],
     ];
 
-    const completedLines = lines.filter((line) =>
-      line.every((idx) => room.strikedNumbers.includes(playerBoard[idx])),
-    );
+    const completedLines = lines.filter((line) => line.every((idx) => room.strikedNumbers.includes(playerBoard[idx])));
     if (completedLines.length < 5) {
       socket.emit(`${this.gamePrefix}_alert`, {
-        icon: "error",
-        title: "Invalid",
+        icon: 'error',
+        title: 'Invalid',
         text: `Need 5 lines for BINGO! You have ${completedLines.length}`,
       });
       return;
     }
 
-    room.gameState = "ended";
+    room.gameState = 'ended';
     this.io.to(sanitizedRoomId).emit(`${this.gamePrefix}_playerWon`, socket.id);
   }
 
@@ -267,7 +255,7 @@ class BingoManager extends BaseManager {
 
     room.players[playerIndex].connected = false;
 
-    if (room.gameState === "playing") {
+    if (room.gameState === 'playing') {
       const activeCount = room.players.filter((p) => p.connected).length;
 
       if (activeCount === 0) {
@@ -275,13 +263,11 @@ class BingoManager extends BaseManager {
           this.rooms.delete(roomId);
         });
       } else if (activeCount === 1) {
-        room.gameState = "paused";
-        this.io
-          .to(room.id)
-          .emit("bingo_gamePaused", { reason: "Opponent disconnected" });
+        room.gameState = 'paused';
+        this.io.to(room.id).emit('bingo_gamePaused', { reason: 'Opponent disconnected' });
       }
 
-      this.io.to(room.id).emit("bingo_playerLeft", { playerId: socket.id });
+      this.io.to(room.id).emit('bingo_playerLeft', { playerId: socket.id });
       this.sendRoomInfo(room.id);
     }
   }
@@ -291,18 +277,18 @@ class BingoManager extends BaseManager {
     const room = this.rooms.get(roomIdSanitized);
     if (!room) {
       socket.emit(`${this.gamePrefix}_alert`, {
-        icon: "error",
-        title: "Error",
-        text: "Room not found",
+        icon: 'error',
+        title: 'Error',
+        text: 'Room not found',
       });
       return;
     }
     const player = room.players.find((p) => p.id === playerId);
     if (!player) {
       socket.emit(`${this.gamePrefix}_alert`, {
-        icon: "error",
-        title: "Error",
-        text: "Player not found",
+        icon: 'error',
+        title: 'Error',
+        text: 'Player not found',
       });
       return false;
     }
@@ -314,18 +300,16 @@ class BingoManager extends BaseManager {
     // Clear empty timer on reconnect
     this.clearTimer(`empty_${roomIdSanitized}`);
 
-    if (room.gameState === "paused") {
+    if (room.gameState === 'paused') {
       const activeCount = room.players.filter((p) => p.connected).length;
       if (activeCount >= 2) {
-        room.gameState = "playing";
+        room.gameState = 'playing';
         this.clearTimer(`forfeit_${roomIdSanitized}`);
-        this.io
-          .to(room.id)
-          .emit(`${this.gamePrefix}_alert`, {
-            icon: "success",
-            title: "Player Reconnected",
-            text: "Game resumed!",
-          });
+        this.io.to(room.id).emit(`${this.gamePrefix}_alert`, {
+          icon: 'success',
+          title: 'Player Reconnected',
+          text: 'Game resumed!',
+        });
       }
     }
 

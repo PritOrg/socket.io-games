@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
   --font-hand-drawn: 'Permanent Marker', cursive;
@@ -28,14 +28,13 @@
 
 .bg-paper {
   background-color: #f5f1e8;
-  background-image:
-    repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 30px,
-      rgba(139, 99, 76, 0.05) 30px,
-      rgba(139, 99, 76, 0.05) 31px
-    );
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 30px,
+    rgba(139, 99, 76, 0.05) 30px,
+    rgba(139, 99, 76, 0.05) 31px
+  );
   position: relative;
 }
 
@@ -56,8 +55,8 @@
   border: 2px solid #2a2a3e;
   border-radius: 3px;
   box-shadow:
-    3px 3px 0px rgba(0,0,0,0.1),
-    inset 0 0 0 1px rgba(255,255,255,0.5);
+    3px 3px 0px rgba(0, 0, 0, 0.1),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.5);
   position: relative;
   transform: rotate(-0.5deg);
 }
@@ -93,17 +92,17 @@
   position: relative;
   transform: rotate(-0.3deg);
   transition: all 0.2s;
-  box-shadow: 2px 2px 0px rgba(0,0,0,0.2);
+  box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.2);
 }
 
 .sketch-button:hover {
   transform: rotate(0deg) translateY(-2px);
-  box-shadow: 3px 3px 0px rgba(0,0,0,0.2);
+  box-shadow: 3px 3px 0px rgba(0, 0, 0, 0.2);
 }
 
 .sketch-button:active {
   transform: rotate(0deg) translateY(0);
-  box-shadow: 1px 1px 0px rgba(0,0,0,0.2);
+  box-shadow: 1px 1px 0px rgba(0, 0, 0, 0.2);
 }
 
 .player-badge {
@@ -141,26 +140,51 @@
 }
 
 @keyframes sketch-wiggle {
-  0%, 100% { transform: rotate(0deg) translateY(0); }
-  25% { transform: rotate(0.5deg) translateY(-1px); }
-  75% { transform: rotate(-0.5deg) translateY(1px); }
+  0%,
+  100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  25% {
+    transform: rotate(0.5deg) translateY(-1px);
+  }
+  75% {
+    transform: rotate(-0.5deg) translateY(1px);
+  }
 }
 
 @keyframes wiggle {
-  0%, 100% { transform: rotate(-1deg); }
-  50% { transform: rotate(1deg); }
+  0%,
+  100% {
+    transform: rotate(-1deg);
+  }
+  50% {
+    transform: rotate(1deg);
+  }
 }
 
 @keyframes pencil-scribble {
-  0% { filter: brightness(1); }
-  50% { filter: brightness(1.2) contrast(1.1); }
-  100% { filter: brightness(1); }
+  0% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.2) contrast(1.1);
+  }
+  100% {
+    filter: brightness(1);
+  }
 }
 
 @keyframes screen-shake {
-  0%, 100% { transform: translate(0); }
-  25% { transform: translate(-2px, 2px); }
-  75% { transform: translate(2px, -2px); }
+  0%,
+  100% {
+    transform: translate(0);
+  }
+  25% {
+    transform: translate(-2px, 2px);
+  }
+  75% {
+    transform: translate(2px, -2px);
+  }
 }
 
 .glass {
@@ -171,22 +195,10 @@
 }
 
 body {
-  background: 
-    linear-gradient(rgba(255,255,255,0.9), rgba(255,255,255,0.9)),
-    repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 19px,
-      #e5e7eb 19px,
-      #e5e7eb 20px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      transparent,
-      transparent 19px,
-      #e5e7eb 19px,
-      #e5e7eb 20px
-    );
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.9)),
+    repeating-linear-gradient(0deg, transparent, transparent 19px, #e5e7eb 19px, #e5e7eb 20px),
+    repeating-linear-gradient(90deg, transparent, transparent 19px, #e5e7eb 19px, #e5e7eb 20px);
   background-size: 20px 20px;
   min-height: 100vh;
 }

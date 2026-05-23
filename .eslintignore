@@ -2,3 +2,5 @@ node_modules
 dist
 .kilo
 *.lock
+e2e/
+load/
