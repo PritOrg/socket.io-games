@@ -1,0 +1,14 @@
+{
+  "name": "socket.io-games-load",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "node runner.js",
+    "test:ttt": "node runner.js --game tictactoe --connections 10 --duration 30",
+    "test:bingo": "node runner.js --game bingo --connections 10 --duration 30",
+    "test:http": "node runner.js --http-only"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.8.3"
+  }
+}
