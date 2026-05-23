@@ -74,7 +74,12 @@ jobs:
           node-version: 20
           cache: 'npm'
           cache-dependency-path: |
+            api/package-lock.json
             pro/package-lock.json
+
+      - name: Install API dependencies
+        run: npm ci
+        working-directory: api
 
       - name: Install Frontend dependencies
         run: npm ci
