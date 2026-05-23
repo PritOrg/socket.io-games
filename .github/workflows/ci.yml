@@ -20,9 +20,13 @@ jobs:
         with:
           node-version: 20
           cache: 'npm'
-          cache-dependency-path: api/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            api/package-lock.json
 
       - run: npm ci
+      - run: npm ci
+        working-directory: api
       - run: npx eslint --ext .js . --max-warnings 50
         working-directory: ..
       - run: npm test
@@ -40,9 +44,13 @@ jobs:
         with:
           node-version: 20
           cache: 'npm'
-          cache-dependency-path: pro/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            pro/package-lock.json
 
       - run: npm ci
+      - run: npm ci
+        working-directory: pro
       - run: npx eslint --ext .js,.jsx . --max-warnings 50
         working-directory: ..
       - run: npx vitest run

@@ -2,153 +2,93 @@
 
 ## Project Overview
 
-A monorepo with two packages:
+A monorepo with two packages (separate `package.json`, separate lockfiles):
 
-- **`api/`** — Node.js (Express + Socket.IO) server, each game in its own manager class under `api/game-logic/`.
-- **`pro/`** — React 18 + Vite frontend, each game in its own folder under `pro/src/`.
+- **`api/`** — Node.js (Express + Socket.IO) server, CommonJS modules.
+  Entrypoint: `api/index.js` (exports `{ server, io, bingoManager, tictactoeManager, utttManager, dabManager }`).
+  Game managers under `api/game-logic/`, each extends `BaseManager` (`api/game-logic/BaseManager.js`).
+  Tests: `api/test/*.test.js` using Mocha + Chai + socket.io-client. Port **4001** during tests.
+- **`pro/`** — React 18 + Vite frontend, ES Modules.
+  Entrypoint: `pro/src/index.jsx`. Routing in `pro/src/App.jsx` (`/`, `/bingo`, `/tictactoe`, `/uttt`, `/dab`).
+  Socket connection managed in `pro/src/context/GameContext.jsx` (wraps app at root).
+  Tests: Vitest + Testing Library. Config in `pro/vite.config.js` — `globals: true`, `jsdom`, `./src/test-setup.js`.
 
-Both `api/` and `pro/` have their own package.json and lockfile. Run commands from the relevant package directory.
+**Quirky / stale leftovers:**
+
+- `prosrcdab/` — empty directory, ignore.
+- `.kilo/` — tool directory, in `.eslintignore`.
 
 ---
 
-## Build / Lint / Test Commands
+## Commands
+
+### Root-level (shared tooling)
+
+```bash
+npm run lint          # eslint . --ext .js,.jsx  (uses local eslint@8, NOT npx)
+npm run format        # prettier --write .
+npm run format:check  # prettier --check .
+```
+
+**IMPORTANT:** Always use `npm run lint` or `npx eslint` from the repo root after `npm install`. The project uses ESLint v8 with `.eslintrc.js`. Running `npx eslint` without local install pulls the latest ESLint (v10+) which requires flat config (`eslint.config.js`) and will fail.
+
+Pre-commit hook (`.husky/pre-commit`): `npx lint-staged` — runs eslint --fix + prettier --write on staged `*.{js,jsx}`.
 
 ### Server (`cd api`)
 
 ```
-npm start          # Start server on port 4000
-npm test           # Run ALL mocha tests: mocha test/*.test.js
+npm start         # node index.js, binds 0.0.0.0:4000
+npm test          # mocha test/*.test.js
+npx mocha test/dab.test.js --grep "Room Creation"   # single describe block
 ```
 
-**Run a single server test file:**
-
-```
-npx mocha test/game.test.js
-npx mocha test/dab.test.js
-```
-
-**Run a single `describe` / `it` block** — use `--grep`:
-
-```
-npx mocha test/dab.test.js --grep "Room Creation"
-npx mocha test/game.test.js --grep "should create a bingo room"
-```
-
-Tests require `NODE_ENV=test` (already set at the top of each test file via `process.env.NODE_ENV = 'test'`). The server binds to port `4001` during tests.
+Tests set `NODE_ENV=test` at the top of each file. Server auto-skips `server.listen()` when `NODE_ENV === 'test'`.
 
 ### Frontend (`cd pro`)
 
 ```
-npm run dev        # Vite dev server
-npm run build      # Production build → dist/
-npm run preview    # Preview built output
-npm test           # Run vitest (watch mode)
+npm run dev        # vite dev server (VITE_PORT or 5173)
+npm run build      # vite build → dist/
+npm test           # vitest (watch mode)
+npx vitest run                                        # single run, no watch
+npx vitest run src/context/GameContext.test.jsx        # single file
+npx vitest run ... --testNamePattern="provides and "   # single describe/it
 ```
-
-**Run a single frontend test file:**
-
-```
-npx vitest run src/context/GameContext.test.jsx
-```
-
-**Run a single `describe` / `it` block** — use `--testNamePattern`:
-
-```
-npx vitest run src/context/GameContext.test.jsx --testNamePattern="provides and updates playerName"
-```
-
-**Run tests once (no watch):**
-
-```
-npx vitest run
-```
-
-Vitest config is in `pro/vite.config.js` — `globals: true`, environment `jsdom`, setup file `./src/test-setup.js`.
 
 ---
 
-## Code Style — Server (`api/`, Node.js)
+## CI Pipeline (`.github/workflows/ci.yml`)
 
-### Module system
-- **CommonJS** only — `require()` / `module.exports`. Do **not** use `import` / `export`.
+On push to `main`/`fix/*`/`feat/*` and PRs to `main`:
 
-### Imports
-- Built-in modules first (`const express = require('express')`), then external, then relative local paths.
-- Order inside `index.js`: express → http → socket.io → cors → local utils → game-logic managers.
-
-### Formatting
-- 2-space indentation (as observed across all `.js` files).
-- Single-quoted strings throughout.
-- Semicolons at end of statements.
-- No trailing commas in object/array literals (historical style; match existing files).
-- No standalone comments unless explicitly needed.
-
-### Naming
-- Constructor / class names: `PascalCase` (e.g. `BingoManager`, `DabManager`).
-- Methods and variables: `camelCase`.
-- Socket event prefixes: `<game>_` lowerCamelCase (`bingo_createRoom`, `ttt_makeMove`, `dab_reconnect`).
-- Constants / config keys: `camelCase`.
-
-### Types / patterns
-- Room state stored in `Map` — use `this.rooms = new Map()` in each manager constructor.
-- No TypeScript — plain JavaScript. Use runtime guard checks (`if (!room || ...) return;`).
-- `UUID` used for Bingo room IDs (`uuidv4().slice(0, 6).toUpperCase()`); DAB/TTT use `Math.random().toString(36)...`
-
-### Error handling
-- Early-return on invalid input — `if (!room) return;`, no thrown errors.
-- Alert the client via `socket.emit('<game>_alert', { icon, title, text })`.
-- Destructure incoming socket payloads: `({ roomId, playerName })` or `({ roomId, lineType, r, c })`.
-
-### Socket patterns
-- Register all events in `handleConnection(socket)` — one listener per event name.
-- Broadcast room changes with `this.io.to(roomId).emit(...)`.
+| Job      | Working dir | Steps                                                                                     |
+| -------- | ----------- | ----------------------------------------------------------------------------------------- |
+| API      | `api/`      | `npm ci` → `npx eslint --ext .js . --max-warnings 50` (from root) → `npm test`            |
+| Frontend | `pro/`      | `npm ci` → `npx eslint --ext .js,.jsx . --max-warnings 50` (from root) → `npx vitest run` |
 
 ---
 
-## Code Style — Frontend (`pro/`, React)
+## Architecture & Conventions
 
-### Module system
+### Server (`api/`)
+
+- **CommonJS** — `require()` / `module.exports`. No `import`/`export`.
+- All game managers extend `BaseManager` (provides: `sanitizeRoomId`, `sanitizePlayerName`, `handleReconnection`, `handlePlayerLeave`, `registerEmptyTimer`, `clearTimer`).
+- Room state stored in `Map` — `this.rooms = new Map()`.
+- Socket events use `<game>_` prefix: `bingo_*`, `ttt_*`, `uttt_*`, `dab_*`.
+  - All events registered in `handleConnection(socket)` — one listener per event.
+  - Broadcast room changes with `this.io.to(roomId).emit(...)`.
+  - Alert client on error: `socket.emit('<game>_alert', { icon, title, text })`.
+- Early-return on invalid input (`if (!room) return;`), no thrown errors.
+- HTTP endpoints: `/health` (GET), `/stats` (GET — room counts + connections), `/cleanup` (POST — removes empty rooms).
+- Logger utility (`api/utils/logger.js`): `logger.info/warn/error/success/debug/category, msg`; `logger.socket(direction, event, socketId, data)` for tracing; `debug` only shown when `process.env.DEBUG` is set.
+- Formatting per `.prettierrc` (120 width, single quotes, **trailing commas required**). Formatter is `prettier` (run `npm run format` at root). Some files may use double quotes — run formatter before committing.
+
+### Frontend (`pro/`)
+
 - **ES Modules** — `import` / `export`.
-- React components default-export as `export default ComponentName`.
-
-### Imports order
-1. React (`import React, { ... } from 'react'`)
-2. External libraries
-3. Internal paths (relative)
-
-### Formatting
-- 2-space indentation.
-- Single-quoted strings.
-- Component files end with `export default ComponentName;`.
-- Inline event callbacks in body (not in a separate handed-off file) unless reused.
-
-### Naming
-- Components: `PascalCase` (`DabGame`, `RetroButton`, `GameContext`).
-- Hooks: `useX` prefix (`useGameContext`, `useCallback`).
-- Contexts: `XxxContext`, `useXxx` accessor hook.
-
-### State patterns
-- `useState` for component-local state.
-- `useCallback` for stable handler references (especially with socket `on`/`off` or `useEffect` deps).
-- Clean up socket listeners in `useEffect` return.
-- Destructure context: `const { socket, playerName, roomId } = useGameContext()`.
-
-### Styling
-- Tailwind CSS v4 (`@tailwindcss/vite`). Use utility-first classes.
-- Custom CSS classes: `glass`, `rounded-3xl`, `paper-font` — defined in `index.css`.
-- Inline SVG uses 2-space indent.
-
-### Vitest / Testing Library conventions
-- `@testing-library/jest-dom` matchers available globally.
-- Use `screen`, `render`, `fireEvent` from `@testing-library/react`.
-- `vi` from `vitest` for mocks.
-- Destructure helpers: `const { GameProvider, useGameContext } = require('./GameContext');`
-
----
-
-## Repo-wide Rules
-
-- **No `.cursor/` or Copilot config files** exist in this repo; these instructions are authoritative.
-- `.env` and credential files never committed — no hardcoded secrets in source.
-- Ports: API dev = `4000`, API tests = `4001`.
-- Socket event naming uniqueness: `bingo_*`, `ttt_*`, `uttt_*`, `dab_*` prefixes across all game types.
+- Imports order: React → external → internal (relative).
+- Styling: **Tailwind CSS v4** via `@tailwindcss/vite`. Custom classes (`glass`, `rounded-3xl`, `paper-font`) in `index.css`.
+- Components: `PascalCase`, default-exported; hooks: `useX` prefix.
+- Socket listeners cleaned up in `useEffect` return. Destructure context via `useGameContext()`.
+- Dev server port: `VITE_PORT` env var or 5173. Backend port: `VITE_PORT` env var or 4000 (configured in `GameContext.jsx`).
