@@ -25,6 +25,7 @@ jobs:
             api/package-lock.json
 
       - run: npm ci
+        working-directory: ..
       - run: npm ci
         working-directory: api
       - run: npx eslint --ext .js . --max-warnings 50
@@ -49,6 +50,7 @@ jobs:
             pro/package-lock.json
 
       - run: npm ci
+        working-directory: ..
       - run: npm ci
         working-directory: pro
       - run: npx eslint --ext .js,.jsx . --max-warnings 50
