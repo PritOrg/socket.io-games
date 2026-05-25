@@ -167,6 +167,7 @@ class SOSManager extends BaseManager {
     const sanitizedRoomId = this.sanitizeRoomId(roomId);
     const room = this.rooms.get(sanitizedRoomId);
     if (!room || room.creator !== socket.id) return;
+    if (room.players.length < 2) return;
 
     room.gameState = 'playing';
     room.currentTurn = 0;
@@ -197,7 +198,15 @@ class SOSManager extends BaseManager {
     if (!room || room.gameState !== 'playing') return;
 
     const playerIndex = room.players.findIndex((p) => p.id === socket.id);
-    if (playerIndex === -1 || playerIndex !== room.currentTurn) return;
+    if (playerIndex === -1) return;
+    if (playerIndex !== room.currentTurn) {
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Not your turn',
+        text: `Wait for your turn`,
+      });
+      return;
+    }
     if (!room.players[playerIndex].connected) return;
 
     if (row < 0 || row >= room.size || col < 0 || col >= room.size) return;
