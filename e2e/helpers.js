@@ -20,6 +20,8 @@ const gameLabels = {
   '/tictactoe': 'Tic Tac Toe',
   '/uttt': 'Ultimate Tic-Tac-Toe',
   '/dab': 'Dots',
+  '/sos': 'SOS',
+  '/connect4': 'Connect 4',
 };
 
 async function navigateToGame(page, gamePath) {

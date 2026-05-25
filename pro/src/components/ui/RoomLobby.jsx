@@ -5,6 +5,7 @@ import CountdownOverlay from './CountdownOverlay';
 const RoomLobby = ({
   roomId,
   players = [],
+  spectators = [],
   isHost,
   minPlayers = 2,
   onStart,
@@ -86,6 +87,19 @@ const RoomLobby = ({
             </div>
           ))}
         </div>
+
+        {/* Spectators */}
+        {spectators.length > 0 && (
+          <div className="space-y-2 pt-2 border-t border-ink/10">
+            <p className="paper-font text-sm text-ink/60">Spectators ({spectators.length})</p>
+            {spectators.map((s, i) => (
+              <div key={s.id || i} className="flex items-center gap-2" style={{ padding: '0.25rem 0' }}>
+                <span className="text-lg">👁️</span>
+                <span className="paper-font text-ink/70">{s.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Actions */}
         <div className="space-y-2">
