@@ -25,25 +25,37 @@ const colors = {
 const logger = {
   debug: (category, message, data) => {
     if (currentLevel <= LOG_LEVELS.debug) {
-      console.log(`${colors.blue}[${formatTime()}]${colors.reset} ${colors.gray}[${category}]${colors.reset} ${message}`, data || '');
+      console.log(
+        `${colors.blue}[${formatTime()}]${colors.reset} ${colors.gray}[${category}]${colors.reset} ${message}`,
+        data || '',
+      );
     }
   },
 
   info: (category, message, data) => {
     if (currentLevel <= LOG_LEVELS.info) {
-      console.log(`${colors.blue}[${formatTime()}]${colors.reset} ${colors.cyan}[${category}]${colors.reset} ${message}`, data || '');
+      console.log(
+        `${colors.blue}[${formatTime()}]${colors.reset} ${colors.cyan}[${category}]${colors.reset} ${message}`,
+        data || '',
+      );
     }
   },
 
   warn: (category, message, data) => {
     if (currentLevel <= LOG_LEVELS.warn) {
-      console.warn(`${colors.blue}[${formatTime()}]${colors.reset} ${colors.yellow}[${category}]${colors.reset} ${message}`, data || '');
+      console.warn(
+        `${colors.blue}[${formatTime()}]${colors.reset} ${colors.yellow}[${category}]${colors.reset} ${message}`,
+        data || '',
+      );
     }
   },
 
   error: (category, message, data) => {
     if (currentLevel <= LOG_LEVELS.error) {
-      console.error(`${colors.blue}[${formatTime()}]${colors.reset} ${colors.red}[${category}]${colors.reset} ${message}`, data || '');
+      console.error(
+        `${colors.blue}[${formatTime()}]${colors.reset} ${colors.red}[${category}]${colors.reset} ${message}`,
+        data || '',
+      );
     }
   },
 
@@ -52,8 +64,8 @@ const logger = {
     const eventColor = direction === '⬅️' ? colors.cyan : colors.magenta;
     console.log(
       `${colors.blue}[${formatTime()}]${colors.reset} ${dirColor}[${direction}]${colors.reset} ` +
-      `${eventColor}[${event}]${colors.reset}`,
-      data || ''
+        `${eventColor}[${event}]${colors.reset}`,
+      data || '',
     );
   },
 };

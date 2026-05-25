@@ -1,5 +1,5 @@
 process.env.NODE_ENV = 'test';
-const { server, io } = require('../index');
+const { server } = require('../index');
 const client = require('socket.io-client');
 const { expect } = require('chai');
 
@@ -22,7 +22,7 @@ describe('PaperParty Backend Tests', function () {
   beforeEach((done) => {
     player1 = client(`http://localhost:${port}`);
     player2 = client(`http://localhost:${port}`);
-    
+
     let connected = 0;
     const checkConnected = () => {
       connected++;
@@ -36,7 +36,7 @@ describe('PaperParty Backend Tests', function () {
   afterEach((done) => {
     if (player1.connected) player1.disconnect();
     if (player2.connected) player2.disconnect();
-    done();
+    setTimeout(done, 100);
   });
 
   describe('Bingo Game Logic', () => {
@@ -55,7 +55,7 @@ describe('PaperParty Backend Tests', function () {
       player1.once('bingo_roomInfo', (room) => {
         const roomId = room.id;
         player2.emit('bingo_joinRoom', { roomId, playerName: 'Bob' });
-        
+
         const onRoomInfo = (updatedRoom) => {
           if (updatedRoom.players.length === 2) {
             player2.off('bingo_roomInfo', onRoomInfo);
@@ -84,7 +84,7 @@ describe('PaperParty Backend Tests', function () {
       player1.once('ttt_roomInfo', (room) => {
         const roomId = room.id;
         player2.emit('ttt_joinRoom', { roomId, playerName: 'Bob' });
-        
+
         player2.once('ttt_gameStarted', () => {
           done();
         });
@@ -96,7 +96,7 @@ describe('PaperParty Backend Tests', function () {
       player1.once('ttt_roomInfo', (room) => {
         const roomId = room.id;
         player2.emit('ttt_joinRoom', { roomId, playerName: 'Bob' });
-        
+
         player1.once('ttt_gameStarted', () => {
           player1.emit('ttt_makeMove', { roomId, position: 0 });
         });
@@ -114,21 +114,21 @@ describe('PaperParty Backend Tests', function () {
       player1.once('ttt_roomInfo', (room) => {
         const roomId = room.id;
         player2.emit('ttt_joinRoom', { roomId, playerName: 'Bob' });
-        
+
         player1.once('ttt_gameStarted', () => {
           // Alice: 0, 1, 2 (Win)
           // Bob: 3, 4
           player1.emit('ttt_makeMove', { roomId, position: 0 });
-          
+
           player2.once('ttt_nextTurn', () => {
             player2.emit('ttt_makeMove', { roomId, position: 3 });
-            
+
             player1.once('ttt_nextTurn', () => {
               player1.emit('ttt_makeMove', { roomId, position: 1 });
-              
+
               player2.once('ttt_nextTurn', () => {
                 player2.emit('ttt_makeMove', { roomId, position: 4 });
-                
+
                 player1.once('ttt_nextTurn', () => {
                   player1.emit('ttt_makeMove', { roomId, position: 2 });
                 });
@@ -161,7 +161,7 @@ describe('PaperParty Backend Tests', function () {
       player1.once('uttt_roomInfo', (room) => {
         const roomId = room.id;
         player2.emit('uttt_joinRoom', { roomId, playerName: 'Bob' });
-        
+
         player2.once('uttt_gameStarted', () => {
           done();
         });
@@ -173,7 +173,7 @@ describe('PaperParty Backend Tests', function () {
       player1.once('uttt_roomInfo', (room) => {
         const roomId = room.id;
         player2.emit('uttt_joinRoom', { roomId, playerName: 'Bob' });
-        
+
         player1.once('uttt_gameStarted', () => {
           // Alice plays in grid 4, square 2
           player1.emit('uttt_makeMove', { roomId, gridIndex: 4, squareIndex: 2 });
@@ -181,9 +181,9 @@ describe('PaperParty Backend Tests', function () {
 
         player1.on('uttt_gameState', (state) => {
           if (state.lastMove && state.lastMove.gridIndex === 4 && state.lastMove.squareIndex === 2) {
-              expect(state.board[4][2]).to.equal('X');
-              expect(state.activeGrid).to.equal(2);
-              done();
+            expect(state.board[4][2]).to.equal('X');
+            expect(state.activeGrid).to.equal(2);
+            done();
           }
         });
       });
@@ -194,20 +194,20 @@ describe('PaperParty Backend Tests', function () {
       player1.once('uttt_roomInfo', (room) => {
         const roomId = room.id;
         player2.emit('uttt_joinRoom', { roomId, playerName: 'Bob' });
-        
+
         player1.once('uttt_gameStarted', () => {
           // Alice plays in grid 4, square 2
           player1.emit('uttt_makeMove', { roomId, gridIndex: 4, squareIndex: 2 });
-          
+
           player2.once('uttt_gameState', (state) => {
-              expect(state.activeGrid).to.equal(2);
-              // Bob tries to play in grid 0 instead of 2
-              player2.emit('uttt_makeMove', { roomId, gridIndex: 0, squareIndex: 0 });
+            expect(state.activeGrid).to.equal(2);
+            // Bob tries to play in grid 0 instead of 2
+            player2.emit('uttt_makeMove', { roomId, gridIndex: 0, squareIndex: 0 });
           });
 
-          player2.once('uttt_error', (error) => {
-              expect(error.message).to.contain('Must play in grid 2');
-              done();
+          player2.once('uttt_alert', (alert) => {
+            expect(alert.text).to.contain('Must play in grid 2');
+            done();
           });
         });
       });
@@ -218,32 +218,32 @@ describe('PaperParty Backend Tests', function () {
       player1.once('uttt_roomInfo', (room) => {
         const roomId = room.id;
         player2.emit('uttt_joinRoom', { roomId, playerName: 'Bob' });
-        
+
         player1.once('uttt_gameStarted', () => {
           // Alice: (4,0), (0,4), (4,1), (1,4), (4,2) -> Alice wins grid 4
           player1.emit('uttt_makeMove', { roomId, gridIndex: 4, squareIndex: 0 });
-          
+
           player2.once('uttt_gameState', () => {
-              player2.emit('uttt_makeMove', { roomId, gridIndex: 0, squareIndex: 4 });
-              
-              player1.once('uttt_gameState', () => {
-                  player1.emit('uttt_makeMove', { roomId, gridIndex: 4, squareIndex: 1 });
-                  
-                  player2.once('uttt_gameState', () => {
-                      player2.emit('uttt_makeMove', { roomId, gridIndex: 1, squareIndex: 4 });
-                      
-                      player1.once('uttt_gameState', () => {
-                          player1.emit('uttt_makeMove', { roomId, gridIndex: 4, squareIndex: 2 });
-                      });
-                  });
+            player2.emit('uttt_makeMove', { roomId, gridIndex: 0, squareIndex: 4 });
+
+            player1.once('uttt_gameState', () => {
+              player1.emit('uttt_makeMove', { roomId, gridIndex: 4, squareIndex: 1 });
+
+              player2.once('uttt_gameState', () => {
+                player2.emit('uttt_makeMove', { roomId, gridIndex: 1, squareIndex: 4 });
+
+                player1.once('uttt_gameState', () => {
+                  player1.emit('uttt_makeMove', { roomId, gridIndex: 4, squareIndex: 2 });
+                });
               });
+            });
           });
 
           player1.on('uttt_gameState', (state) => {
-              if (state.macroBoard[4] === 'X') {
-                  expect(state.scores.X).to.equal(1);
-                  done();
-              }
+            if (state.macroBoard[4] === 'X') {
+              expect(state.scores.X).to.equal(1);
+              done();
+            }
           });
         });
       });

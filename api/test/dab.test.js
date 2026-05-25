@@ -1,5 +1,5 @@
 process.env.NODE_ENV = 'test';
-const { server, io } = require('../index');
+const { server } = require('../index');
 const client = require('socket.io-client');
 const { expect } = require('chai');
 
@@ -38,30 +38,26 @@ describe('Dots & Boxes (DAB) Game Logic', function () {
     if (player2.connected) player2.disconnect();
     if (player3.connected) player3.disconnect();
     if (player4.connected) player4.disconnect();
-    done();
+    setTimeout(done, 100);
   });
 
   function setupRoom(mode = 'custom', customRows = 3, customCols = 3, customPlayers = 2) {
     return new Promise((resolve) => {
       player1.emit('dab_createRoom', { mode, customRows, customCols, customPlayers });
       player1.once('dab_roomInfo', (room) => {
-        if (customPlayers === 2) {
-          player1.once('dab_gameStarted', () => {
-            resolve(room.id);
-          });
-          player2.emit('dab_joinRoom', { roomId: room.id, playerName: 'Bob' });
-        } else {
-          player1.once('dab_gameStarted', () => {
-            resolve(room.id);
-          });
-          player2.emit('dab_joinRoom', { roomId: room.id, playerName: 'Bob' });
-          if (customPlayers >= 3) {
-            player3.emit('dab_joinRoom', { roomId: room.id, playerName: 'Charlie' });
-          }
-          if (customPlayers >= 4) {
-            player4.emit('dab_joinRoom', { roomId: room.id, playerName: 'Diana' });
-          }
+        player2.emit('dab_joinRoom', { roomId: room.id, playerName: 'Bob' });
+        if (customPlayers >= 3) {
+          player3.emit('dab_joinRoom', { roomId: room.id, playerName: 'Charlie' });
         }
+        if (customPlayers >= 4) {
+          player4.emit('dab_joinRoom', { roomId: room.id, playerName: 'Diana' });
+        }
+        player2.once('dab_roomInfo', () => {
+          player1.emit('dab_startGame', { roomId: room.id });
+          player1.once('dab_gameStarted', () => {
+            resolve(room.id);
+          });
+        });
       });
     });
   }
@@ -150,23 +146,28 @@ describe('Dots & Boxes (DAB) Game Logic', function () {
         const roomId = room.id;
         player2.emit('dab_joinRoom', { roomId, playerName: 'Bob' });
 
-player2.once('dab_roomInfo', (updatedRoom) => {
-           if (updatedRoom.players.length === 2) {
-             expect(updatedRoom.players[0].name).to.equal('Player 1');
-             expect(updatedRoom.players[1].name).to.equal('Bob');
-             done();
-           }
-         });
+        player2.once('dab_roomInfo', (updatedRoom) => {
+          if (updatedRoom.players.length === 2) {
+            expect(updatedRoom.players[0].name).to.equal('Player 1');
+            expect(updatedRoom.players[1].name).to.equal('Bob');
+            done();
+          }
+        });
       });
     });
 
     it('should start game when second player joins', (done) => {
+      let timeout = setTimeout(() => done(new Error('timeout')), 1500);
       player1.emit('dab_createRoom', { mode: 'custom', customRows: 3, customCols: 3, customPlayers: 2 });
       player1.once('dab_roomInfo', (room) => {
-        player1.once('dab_gameStarted', () => {
-          done();
-        });
         player2.emit('dab_joinRoom', { roomId: room.id, playerName: 'Bob' });
+        player2.once('dab_roomInfo', () => {
+          player1.emit('dab_startGame', { roomId: room.id });
+          player1.once('dab_gameStarted', () => {
+            clearTimeout(timeout);
+            done();
+          });
+        });
       });
     });
 
@@ -182,13 +183,14 @@ player2.once('dab_roomInfo', (updatedRoom) => {
       player1.emit('dab_createRoom', { mode: 'custom', customRows: 3, customCols: 3, customPlayers: 2 });
       player1.once('dab_roomInfo', (room) => {
         player2.emit('dab_joinRoom', { roomId: room.id, playerName: 'Bob' });
-        player2.once('dab_gameStarted', () => {
+        player1.once('dab_gameStarted', () => {
           player3.emit('dab_joinRoom', { roomId: room.id, playerName: 'Charlie' });
           player3.once('dab_alert', (data) => {
             expect(data.icon).to.equal('error');
             done();
           });
         });
+        player1.emit('dab_startGame', { roomId: room.id });
       });
     });
   });
@@ -250,7 +252,7 @@ player2.once('dab_roomInfo', (updatedRoom) => {
       expect(roomInfo.horizontalLines[0][0]).to.equal(0);
     });
 
-    it('should reject move when not player\'s turn', async () => {
+    it("should reject move when not player's turn", async () => {
       const roomId = await setupRoom();
       await makeMove(player1, roomId, 'h', 0, 0);
 
@@ -489,12 +491,15 @@ player2.once('dab_roomInfo', (updatedRoom) => {
       player1.emit('dab_createRoom', { mode: 'custom', customRows: 3, customCols: 3, customPlayers: 2 });
       player1.once('dab_roomInfo', (room) => {
         player2.emit('dab_joinRoom', { roomId: room.id, playerName: 'Bob' });
-        player2.once('dab_gameStarted', () => {
-          player3.emit('dab_joinRoom', { roomId: room.id, playerName: 'Charlie' });
-          player3.once('dab_alert', (data) => {
-            expect(data.icon).to.equal('error');
-            expect(data.text).to.equal('Game already in progress');
-            done();
+        player2.once('dab_roomInfo', () => {
+          player1.emit('dab_startGame', { roomId: room.id });
+          player1.once('dab_gameStarted', () => {
+            player3.emit('dab_joinRoom', { roomId: room.id, playerName: 'Charlie' });
+            player3.once('dab_alert', (data) => {
+              expect(data.icon).to.equal('error');
+              expect(data.text).to.equal('Game already in progress');
+              done();
+            });
           });
         });
       });
@@ -524,7 +529,7 @@ player2.once('dab_roomInfo', (updatedRoom) => {
       player1.emit('dab_createRoom', { mode: 'custom', customRows: 3, customCols: 3, customPlayers: 3 });
       player1.once('dab_roomInfo', (room) => {
         expect(room.scores).to.have.lengthOf(3);
-        expect(room.scores.every(s => s === 0)).to.equal(true);
+        expect(room.scores.every((s) => s === 0)).to.equal(true);
         done();
       });
     });
@@ -567,7 +572,7 @@ player2.once('dab_roomInfo', (updatedRoom) => {
 
   describe('Player Disconnection During Game', () => {
     it('should emit dab_playerLeft when player disconnects', async () => {
-      const roomId = await setupRoom();
+      await setupRoom();
       const disconnectedId = player2.id;
 
       const playerLeftPromise = new Promise((resolve) => {
@@ -582,7 +587,7 @@ player2.once('dab_roomInfo', (updatedRoom) => {
     });
 
     it('should emit dab_gamePaused when only one player remains', async () => {
-      const roomId = await setupRoom();
+      await setupRoom();
 
       const pausedPromise = new Promise((resolve) => {
         player1.once('dab_gamePaused', resolve);
@@ -637,6 +642,76 @@ player2.once('dab_roomInfo', (updatedRoom) => {
 
       const result = await resultPromise;
       expect(result).to.equal('timeout');
+    });
+  });
+
+  describe('Explicit Leave', () => {
+    it('should handle dab_leaveRoom and mark player disconnected', async () => {
+      const roomId = await setupRoom('custom', 3, 3, 2);
+
+      const playerLeftPromise = new Promise((resolve) => {
+        player2.once('dab_playerLeft', resolve);
+      });
+
+      player1.emit('dab_leaveRoom', roomId);
+
+      const data = await playerLeftPromise;
+      expect(data.playerId).to.equal(player1.id);
+    });
+  });
+
+  describe('Restart Game', () => {
+    it('should fully reset state on restartGame', async () => {
+      const roomId = await setupRoom();
+
+      // Make a move first
+      await makeMove(player1, roomId, 'h', 0, 0);
+
+      // Restart
+      const roomInfoPromise = new Promise((resolve) => {
+        player1.once('dab_roomInfo', resolve);
+      });
+      player1.emit('dab_restartGame', roomId);
+      const room = await roomInfoPromise;
+
+      // All lines should be null after restart
+      const hEmpty = room.horizontalLines.every((row) => row.every((cell) => cell === null));
+      const vEmpty = room.verticalLines.every((row) => row.every((cell) => cell === null));
+      const boxesEmpty = room.boxes.every((row) => row.every((cell) => cell === null));
+      const scoresZero = room.scores.every((s) => s === 0);
+
+      expect(hEmpty).to.equal(true);
+      expect(vEmpty).to.equal(true);
+      expect(boxesEmpty).to.equal(true);
+      expect(scoresZero).to.equal(true);
+      expect(room.lastMove).to.equal(null);
+      expect(room.currentTurn).to.equal(0);
+    });
+  });
+
+  describe('Restart & Reconnect Flow', () => {
+    it('should allow a restarted opponent to rejoin with new socket', async () => {
+      const roomId = await setupRoom();
+
+      await makeMove(player1, roomId, 'h', 0, 0);
+      await makeMove(player2, roomId, 'v', 0, 0);
+
+      // Restart from creator
+      player1.emit('dab_restartGame', roomId);
+
+      const roomInfoPromise = new Promise((resolve) => {
+        player2.once('dab_roomInfo', resolve);
+      });
+      const restartedRoom = await roomInfoPromise;
+      expect(restartedRoom.gameState).to.equal('waiting');
+
+      // Player2 (new socket) can still reconnect
+      const reconnectPromise = new Promise((resolve) => {
+        player2.once('dab_roomInfo', resolve);
+      });
+      player2.emit('dab_reconnect', { roomId, playerId: player2.id });
+      const newRoom = await reconnectPromise;
+      expect(newRoom.players[0].connected).to.equal(true);
     });
   });
 });

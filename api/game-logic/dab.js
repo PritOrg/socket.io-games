@@ -1,15 +1,25 @@
-class DabManager {
+const BaseManager = require('./BaseManager');
+
+class DabManager extends BaseManager {
   constructor(io) {
-    this.io = io;
-    this.rooms = new Map();
+    super(io);
+    this.gamePrefix = 'dab';
   }
 
   handleConnection(socket) {
-    socket.on('dab_createRoom', (data) => this.createRoom(socket, data));
-    socket.on('dab_joinRoom', (data) => this.joinRoom(socket, data));
-    socket.on('dab_reconnect', (data) => this.reconnect(socket, data));
-    socket.on('dab_makeMove', (data) => this.makeMove(socket, data));
-    socket.on('dab_restartGame', (roomId) => this.restartGame(socket, roomId));
+    socket.on(`${this.gamePrefix}_createRoom`, (data) => this.createRoom(socket, data));
+    socket.on(`${this.gamePrefix}_joinRoom`, (data) => this.joinRoom(socket, data));
+    socket.on(`${this.gamePrefix}_reconnect`, (data) => this.reconnect(socket, data));
+    socket.on(`${this.gamePrefix}_leaveRoom`, (roomId) => this.leaveRoom(socket, roomId));
+    socket.on(`${this.gamePrefix}_makeMove`, (data) => this.makeMove(socket, data));
+    socket.on(`${this.gamePrefix}_requestRedo`, (roomId) => this.requestRedo(socket, roomId));
+    socket.on(`${this.gamePrefix}_respondRedo`, (data) => this.respondRedo(socket, data));
+    socket.on(`${this.gamePrefix}_restartGame`, (roomId) => this.restartGame(socket, roomId));
+    socket.on(`${this.gamePrefix}_startGame`, (data) => this.startGame(socket, data));
+    socket.on(`${this.gamePrefix}_requestRoomInfo`, (roomId) => {
+      const sanitized = this.sanitizeRoomId(roomId);
+      if (sanitized) this.sendRoomInfo(sanitized);
+    });
     socket.on('disconnect', () => this.handleDisconnect(socket));
   }
 
@@ -38,7 +48,7 @@ class DabManager {
     }
 
     const maxPlayers = Math.max(2, Math.min(4, customPlayers || 2));
-    const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const roomId = this.generateRoomId();
     socket.join(roomId);
 
     const room = {
@@ -49,97 +59,285 @@ class DabManager {
       currentTurn: 0,
       rows,
       cols,
-      horizontalLines: Array(rows + 1).fill(null).map(() => Array(cols).fill(null)),
-      verticalLines: Array(rows).fill(null).map(() => Array(cols + 1).fill(null)),
-      boxes: Array(rows).fill(null).map(() => Array(cols).fill(null)),
+      horizontalLines: Array(rows + 1)
+        .fill(null)
+        .map(() => Array(cols).fill(null)),
+      verticalLines: Array(rows)
+        .fill(null)
+        .map(() => Array(cols + 1).fill(null)),
+      boxes: Array(rows)
+        .fill(null)
+        .map(() => Array(cols).fill(null)),
       scores: Array(maxPlayers).fill(0),
       lastMove: null,
+      lastMovePlayerIndex: null,
+      lastClaimedBox: null,
+      redoRequest: null,
+      redoRequestTimer: null,
       emptyTimer: null,
       forfeitTimer: null,
-      maxPlayers
+      maxPlayers,
+      startedWithPlayers: maxPlayers,
     };
 
     this.rooms.set(roomId, room);
+    this._trackSocket(socket.id, roomId);
     this.sendRoomInfo(roomId);
   }
 
   joinRoom(socket, { roomId, playerName }) {
-    const room = this.rooms.get(roomId?.toUpperCase());
+    const sanitizedRoomId = this.sanitizeRoomId(roomId);
+    if (!sanitizedRoomId) {
+      socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Error', text: 'Invalid room ID' });
+      return;
+    }
+    const room = this.rooms.get(sanitizedRoomId);
     if (!room) {
-      socket.emit('dab_alert', { icon: 'error', title: 'Error', text: 'Room not found' });
+      socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Error', text: 'Room not found' });
       return;
     }
     if (room.gameState !== 'waiting') {
-      socket.emit('dab_alert', { icon: 'error', title: 'Error', text: 'Game already in progress' });
+      socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Error', text: 'Game already in progress' });
       return;
     }
     if (room.players.length >= room.maxPlayers) {
-      socket.emit('dab_alert', { icon: 'error', title: 'Error', text: 'Room is full' });
+      socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Error', text: 'Room is full' });
       return;
     }
 
     socket.join(room.id);
     room.players.push({ id: socket.id, name: playerName, connected: true });
+    this._trackSocket(socket.id, room.id);
 
-    if (room.players.length >= room.maxPlayers) {
-      room.gameState = 'playing';
-      room.currentTurn = 0;
-      this.io.to(room.id).emit('dab_gameStarted', { firstTurn: room.players[0].id });
+    this.sendRoomInfo(room.id);
+  }
+
+  leaveRoom(socket, roomId) {
+    const sanitizedRoomId = this.sanitizeRoomId(roomId);
+    const room = this.rooms.get(sanitizedRoomId);
+    if (!room) return;
+
+    const playerIndex = room.players.findIndex((p) => p.id === socket.id);
+    if (playerIndex === -1) return;
+
+    if (room.gameState === 'playing') {
+      room.players[playerIndex].connected = false;
+
+      const activeCount = room.players.filter((p) => p.connected).length;
+
+      if (activeCount === 0) {
+        this.registerEmptyTimer(sanitizedRoomId, () => {
+          this.rooms.delete(sanitizedRoomId);
+        });
+      } else if (activeCount === 1) {
+        const canContinue = room.startedWithPlayers >= 4;
+        if (!canContinue) {
+          room.gameState = 'paused';
+          this.io.to(room.id).emit(`${this.gamePrefix}_gamePaused`, { reason: 'Opponent disconnected' });
+        }
+      }
+    } else {
+      room.players.splice(playerIndex, 1);
+      if (room.players.length === 0) {
+        this.rooms.delete(sanitizedRoomId);
+        return;
+      }
+      if (room.creator === socket.id) {
+        room.creator = room.players[0].id;
+      }
     }
 
+    this._untrackSocket(socket.id, room.id);
+    this.io.to(room.id).emit(`${this.gamePrefix}_playerLeft`, { playerId: socket.id });
     this.sendRoomInfo(room.id);
   }
 
   restartGame(socket, roomId) {
-    const room = this.rooms.get(roomId);
+    const sanitizedRoomId = this.sanitizeRoomId(roomId);
+    const room = this.rooms.get(sanitizedRoomId);
     if (!room) return;
     if (room.creator !== socket.id) return;
 
-    room.gameState = 'ready';
+    room.gameState = 'waiting';
     room.currentTurn = 0;
-    room.board = Array(room.rows).fill(null).map(() => Array(room.cols).fill(null));
-    room.macroBoard = Array(9).fill(null);
-    room.horizontalLines = Array(room.rows + 1).fill(null).map(() => Array(room.cols).fill(null));
-    room.verticalLines = Array(room.rows).fill(null).map(() => Array(room.cols + 1).fill(null));
-    room.boxes = Array(room.rows).fill(null).map(() => Array(room.cols).fill(null));
-    room.scores = Array(room.players.length).fill(0);
+    room.horizontalLines = Array(room.rows + 1)
+      .fill(null)
+      .map(() => Array(room.cols).fill(null));
+    room.verticalLines = Array(room.rows)
+      .fill(null)
+      .map(() => Array(room.cols + 1).fill(null));
+    room.boxes = Array(room.rows)
+      .fill(null)
+      .map(() => Array(room.cols).fill(null));
+    room.scores = Array(room.maxPlayers).fill(0);
     room.lastMove = null;
+    room.lastMovePlayerIndex = null;
+    room.redoRequest = null;
+    room.redoRequestTimer = null;
+    room.gameState = 'waiting';
 
-    this.io.to(room.id).emit('dab_gameRestarted');
+    this.io.to(room.id).emit(`${this.gamePrefix}_gameRestarted`);
+    this.sendRoomInfo(room.id);
+  }
+
+  startGame(socket, { roomId }) {
+    const sanitizedRoomId = this.sanitizeRoomId(roomId);
+    const room = this.rooms.get(sanitizedRoomId);
+    if (!room || room.creator !== socket.id) return;
+    if (room.players.length < 2) return;
+
+    room.gameState = 'playing';
+    room.currentTurn = 0;
+    room.startedWithPlayers = room.players.length;
+    this.io.to(sanitizedRoomId).emit(`${this.gamePrefix}_gameStarted`, { firstTurn: room.players[0].id });
+    this.sendRoomInfo(sanitizedRoomId);
+  }
+
+  requestRedo(socket, roomId) {
+    const roomIdSanitized = this.sanitizeRoomId(roomId);
+    const room = this.rooms.get(roomIdSanitized);
+    if (!room || room.gameState !== 'playing') return;
+    if (room.lastMove === null) return;
+
+    // Only the player who made the last move can request a redo
+    const playerIndex = room.players.findIndex((p) => p.id === socket.id);
+    if (playerIndex === -1) return;
+
+    // Check if this player made the last move (stored in lastMove playerIndex context)
+    // We need to track who made the last move - use redoData from moveResult as reference
+    const lastMoverIndex = room.lastMovePlayerIndex;
+    if (playerIndex !== lastMoverIndex) {
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Not Allowed',
+        text: 'Only the player who just moved can request a redo.',
+      });
+      return;
+    }
+
+    // Determine who can respond (the next player in turn order)
+    const nextPlayerIndex = this.getNextTurn(room);
+
+    // Clear any existing redo request timer
+    if (room.redoRequestTimer) {
+      clearTimeout(room.redoRequestTimer);
+      room.redoRequestTimer = null;
+    }
+
+    room.redoRequest = {
+      requesterId: socket.id,
+      requesterIndex: playerIndex,
+      requesterName: room.players[playerIndex].name,
+      targetId: room.players[nextPlayerIndex].id,
+      lastMove: room.lastMove ? { ...room.lastMove } : null,
+      claimedBox: room.lastClaimedBox || null,
+    };
+
+    this.io.to(room.id).emit(`${this.gamePrefix}_redoRequested`, {
+      requesterId: socket.id,
+    });
+  }
+
+  respondRedo(socket, { roomId, accept }) {
+    const roomIdSanitized = this.sanitizeRoomId(roomId);
+    const room = this.rooms.get(roomIdSanitized);
+    if (!room || room.gameState !== 'playing' || !room.redoRequest) return;
+
+    if (socket.id !== room.redoRequest.targetId) {
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Not Allowed',
+        text: 'Only the immediate player can respond to this redo request.',
+      });
+      return;
+    }
+
+    const requester = room.players[room.redoRequest.requesterIndex];
+    if (!requester || !requester.connected) {
+      room.redoRequest = null;
+      this.io.to(room.id).emit(`${this.gamePrefix}_redoResponse`, {
+        accepted: false,
+        reason: 'Requester disconnected.',
+      });
+      return;
+    }
+
+    if (accept) {
+      if (!room.redoRequest.lastMove) {
+        room.redoRequest = null;
+        this.io.to(room.id).emit(`${this.gamePrefix}_redoResponse`, { accepted: false });
+        return;
+      }
+
+      const { lineType, r, c } = room.redoRequest.lastMove;
+      if (lineType === 'h') {
+        room.horizontalLines[r][c] = null;
+      } else {
+        room.verticalLines[r][c] = null;
+      }
+
+      const claimedBox = room.redoRequest.claimedBox;
+      if (claimedBox) {
+        room.boxes[claimedBox.r][claimedBox.c] = null;
+        room.scores[room.redoRequest.requesterIndex]--;
+      }
+
+      room.lastMove = null;
+      room.lastMovePlayerIndex = null;
+      room.lastClaimedBox = null;
+      // Turn goes to the requester (who made the original move being redone)
+      room.currentTurn = room.redoRequest.requesterIndex;
+
+      this.io.to(room.id).emit(`${this.gamePrefix}_moveUndone`, {
+        horizontalLines: room.horizontalLines,
+        verticalLines: room.verticalLines,
+        boxes: room.boxes,
+        scores: [...room.scores],
+        currentTurn: room.currentTurn,
+      });
+    } else {
+      this.io.to(room.id).emit(`${this.gamePrefix}_redoResponse`, {
+        accepted: false,
+        requesterId: room.redoRequest.requesterId,
+        requesterName: room.redoRequest.requesterName,
+      });
+    }
+
+    room.redoRequest = null;
     this.sendRoomInfo(room.id);
   }
 
   reconnect(socket, { roomId, playerId }) {
-    const room = this.rooms.get(roomId?.toUpperCase());
+    const sanitizedRoomId = this.sanitizeRoomId(roomId);
+    const room = this.rooms.get(sanitizedRoomId);
     if (!room) {
-      socket.emit('dab_alert', { icon: 'error', title: 'Error', text: 'Room not found' });
+      socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Error', text: 'Room not found' });
       return;
     }
 
-    const player = room.players.find(p => p.id === playerId);
+    const player = room.players.find((p) => p.id === playerId);
     if (!player) {
-      socket.emit('dab_alert', { icon: 'error', title: 'Error', text: 'Player not found in room' });
+      socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Error', text: 'Player not found in room' });
       return;
     }
 
     socket.join(room.id);
     player.id = socket.id;
     player.connected = true;
+    this._trackSocket(socket.id, room.id);
 
-    if (room.emptyTimer) {
-      clearTimeout(room.emptyTimer);
-      room.emptyTimer = null;
-    }
+    this.clearTimer(`empty_${sanitizedRoomId}`);
 
     if (room.gameState === 'paused') {
-      const activeCount = room.players.filter(p => p.connected).length;
+      const activeCount = room.players.filter((p) => p.connected).length;
       if (activeCount >= 2) {
         room.gameState = 'playing';
-        if (room.forfeitTimer) {
-          clearTimeout(room.forfeitTimer);
-          room.forfeitTimer = null;
-        }
-        this.io.to(room.id).emit('dab_alert', { icon: 'success', title: 'Player Reconnected', text: 'Game resumed!' });
+        this.clearTimer(`forfeit_${sanitizedRoomId}`);
+        this.io.to(room.id).emit(`${this.gamePrefix}_alert`, {
+          icon: 'success',
+          title: 'Player Reconnected',
+          text: 'Game resumed!',
+        });
       }
     }
 
@@ -147,14 +345,15 @@ class DabManager {
   }
 
   makeMove(socket, { roomId, lineType, r, c }) {
-    const room = this.rooms.get(roomId);
+    const roomIdSanitized = this.sanitizeRoomId(roomId);
+    const room = this.rooms.get(roomIdSanitized);
     if (!room || room.gameState !== 'playing') return;
 
     if (!room.players[room.currentTurn].connected) {
       room.currentTurn = this.getNextTurn(room);
     }
 
-    const playerIndex = room.players.findIndex(p => p.id === socket.id);
+    const playerIndex = room.players.findIndex((p) => p.id === socket.id);
     if (playerIndex === -1 || playerIndex !== room.currentTurn) return;
     if (!room.players[playerIndex].connected) return;
 
@@ -173,24 +372,41 @@ class DabManager {
     }
 
     room.lastMove = { lineType, r, c };
+    room.lastMovePlayerIndex = playerIndex;
+
+    // Clear any pending redo request when a new move is made
+    if (room.redoRequest) {
+      room.redoRequest = null;
+      room.redoRequestTimer = null;
+    }
 
     const claimedBoxes = this.checkBoxes(room, r, c, lineType, playerIndex);
+
+    if (claimedBoxes.length > 0) {
+      room.lastClaimedBox = claimedBoxes[claimedBoxes.length - 1];
+    } else {
+      room.lastClaimedBox = null;
+    }
 
     if (claimedBoxes.length === 0) {
       room.currentTurn = this.getNextTurn(room);
     }
 
-    const currentPlayer = room.players[room.currentTurn];
-
-this.io.to(roomId).emit('dab_moveResult', {
-       lineType,
-       r,
-       c,
-       claimedBoxes,
-       scores: [...room.scores],
-       currentTurn: room.currentTurn,
-       playerIndex
-     });
+    this.io.to(roomId).emit(`${this.gamePrefix}_moveResult`, {
+      lineType,
+      r,
+      c,
+      claimedBoxes,
+      scores: [...room.scores],
+      currentTurn: room.currentTurn,
+      playerIndex,
+      redoData: {
+        requesterId: room.players[playerIndex].id,
+        requesterIndex: playerIndex,
+        lastMove: { lineType, r, c },
+        claimedBox: claimedBoxes.length > 0 ? claimedBoxes[0] : null,
+      },
+    });
 
     if (this.checkGameOver(room)) {
       this.emitGameOver(room);
@@ -234,7 +450,7 @@ this.io.to(roomId).emit('dab_moveResult', {
 
   getNextTurn(room) {
     let nextTurn = (room.currentTurn + 1) % room.players.length;
-    const activeCount = room.players.filter(p => p.connected).length;
+    const activeCount = room.players.filter((p) => p.connected).length;
     if (activeCount > 1) {
       let safety = 0;
       while (!room.players[nextTurn].connected && safety < room.players.length) {
@@ -257,73 +473,63 @@ this.io.to(roomId).emit('dab_moveResult', {
     const maxScore = Math.max(...room.scores);
     const winners = room.scores
       .map((score, index) => ({ index, score, player: room.players[index] }))
-      .filter(entry => entry.score === maxScore);
+      .filter((entry) => entry.score === maxScore);
 
     if (winners.length === 1) {
-      this.io.to(room.id).emit('dab_gameOver', {
+      this.io.to(room.id).emit(`${this.gamePrefix}_gameOver`, {
         winner: winners[0].player.id,
-        scores: [...room.scores]
+        scores: [...room.scores],
       });
     } else {
-      this.io.to(room.id).emit('dab_gameOver', {
+      this.io.to(room.id).emit(`${this.gamePrefix}_gameOver`, {
         winner: null,
         scores: [...room.scores],
-        winners: winners.map(w => w.player.id)
+        winners: winners.map((w) => w.player.id),
       });
     }
 
-    if (room.forfeitTimer) {
-      clearTimeout(room.forfeitTimer);
-      room.forfeitTimer = null;
-    }
+    this.clearTimer(`forfeit_${room.id}`);
   }
 
   handleDisconnect(socket) {
-    for (const [roomId, room] of this.rooms.entries()) {
-      const playerIndex = room.players.findIndex(p => p.id === socket.id);
+    const roomIds = this.socketRooms.get(socket.id);
+    if (!roomIds) return;
+    for (const roomId of [...roomIds]) {
+      const room = this.rooms.get(roomId);
+      if (!room) continue;
+      const playerIndex = room.players.findIndex((p) => p.id === socket.id);
       if (playerIndex === -1) continue;
 
       room.players[playerIndex].connected = false;
 
       if (room.gameState === 'playing') {
-        const activeCount = room.players.filter(p => p.connected).length;
+        const activeCount = room.players.filter((p) => p.connected).length;
 
         if (activeCount === 0) {
-          room.emptyTimer = setTimeout(() => {
+          this.registerEmptyTimer(roomId, () => {
             this.rooms.delete(roomId);
-          }, 5 * 60 * 1000);
+          });
         } else if (activeCount === 1) {
-          room.gameState = 'paused';
-          this.io.to(roomId).emit('dab_gamePaused', { reason: 'Opponent disconnected' });
-
-          room.forfeitTimer = setTimeout(() => {
-            if (room.gameState === 'paused') {
-              const remainingPlayer = room.players.find(p => p.connected);
-              if (remainingPlayer) {
-                const remainingIndex = room.players.indexOf(remainingPlayer);
-                room.scores[remainingIndex] += room.rows * room.cols - room.scores.reduce((sum, s) => sum + s, 0);
-              }
-              this.emitGameOver(room);
-            }
-          }, 5 * 60 * 1000);
-        } else {
-          if (room.currentTurn === playerIndex) {
-            room.currentTurn = this.getNextTurn(room);
+          const canContinue = room.startedWithPlayers >= 4;
+          if (!canContinue) {
+            room.gameState = 'paused';
+            this.io.to(room.id).emit(`${this.gamePrefix}_gamePaused`, { reason: 'Opponent disconnected' });
           }
         }
 
-        this.io.to(roomId).emit('dab_playerLeft', { playerId: socket.id });
-        this.sendRoomInfo(roomId);
+        this.io.to(room.id).emit(`${this.gamePrefix}_playerLeft`, { playerId: socket.id });
+        this.sendRoomInfo(room.id);
       }
     }
+    this.socketRooms.delete(socket.id);
   }
 
   sendRoomInfo(roomId) {
     const room = this.rooms.get(roomId);
     if (!room) return;
 
-    const { emptyTimer, forfeitTimer, ...sanitized } = room;
-    this.io.to(roomId).emit('dab_roomInfo', sanitized);
+    const { ...sanitized } = room;
+    this.io.to(roomId).emit(`${this.gamePrefix}_roomInfo`, sanitized);
   }
 }
 

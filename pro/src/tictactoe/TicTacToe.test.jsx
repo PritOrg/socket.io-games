@@ -5,60 +5,155 @@ import TicTacToe from './TicTacToe';
 import { GameProvider } from '../context/GameContext';
 import { BrowserRouter } from 'react-router-dom';
 
-// Mock Socket.io
 const mockSocket = {
-  id: 'mock-id',
+  id: 'p1',
   on: vi.fn(),
   off: vi.fn(),
   emit: vi.fn(),
   disconnect: vi.fn(),
 };
 
-vi.mock('socket.io-client', () => ({
-  default: () => mockSocket
-}));
+vi.mock('socket.io-client', () => ({ default: () => mockSocket }));
+vi.mock('use-sound', () => ({ default: () => [vi.fn()] }));
+vi.mock('canvas-confetti', () => ({ default: vi.fn() }));
+vi.mock('sweetalert2', () => ({ default: { fire: vi.fn().mockResolvedValue({ isConfirmed: true }) } }));
+
+const Wrapper = ({ children }) => (
+  <GameProvider>
+    <BrowserRouter>{children}</BrowserRouter>
+  </GameProvider>
+);
+
+const findEventCb = (event) => {
+  const call = mockSocket.on.mock.calls.find((c) => c[0] === event);
+  return call?.[1];
+};
+
+const playingRoomInfo = {
+  id: 'TTT01',
+  players: [
+    { id: 'p1', name: 'Alice', connected: true },
+    { id: 'p2', name: 'Bob', connected: true },
+  ],
+  gameState: 'playing',
+  currentTurn: 'p1',
+  board: Array(9).fill(null),
+};
 
 describe('TicTacToe', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
   });
 
-  it('emits ttt_makeMove when a cell is clicked', async () => {
-    render(
-      <GameProvider>
-        <BrowserRouter>
-          <TicTacToe />
-        </BrowserRouter>
-      </GameProvider>
-    );
+  describe('Lobby - No Room', () => {
+    it('shows Create and Join buttons when no room', () => {
+      render(<TicTacToe />, { wrapper: Wrapper });
+      expect(screen.getByText('Create')).toBeTruthy();
+      expect(screen.getByText('Join')).toBeTruthy();
+    });
 
-    // Simulate being in a game and it being our turn
-    const roomInfoCall = mockSocket.on.mock.calls.find(call => call[0] === 'ttt_roomInfo');
-    if (!roomInfoCall) throw new Error('ttt_roomInfo listener not registered');
-    
-    const roomInfoCallback = roomInfoCall[1];
-    
-    await act(async () => {
-      roomInfoCallback({
-        id: '123456',
-        players: [{ id: 'mock-id', name: 'Alice' }, { id: 'bob-id', name: 'Bob' }],
-        gameState: 'playing',
-        currentTurn: 'mock-id',
-        board: Array(9).fill(null)
+    it('emits ttt_createRoom when Create is clicked', async () => {
+      render(<TicTacToe />, { wrapper: Wrapper });
+      await act(async () => {
+        fireEvent.click(screen.getByText('Create'));
       });
+      expect(mockSocket.emit).toHaveBeenCalledWith('ttt_createRoom', expect.any(String));
+    });
+  });
+
+  describe('Board Rendering', () => {
+    it('renders the game board when roomInfo received with playing state', async () => {
+      render(<TicTacToe />, { wrapper: Wrapper });
+
+      const cb = findEventCb('ttt_roomInfo');
+      await act(async () => {
+        cb(playingRoomInfo);
+      });
+
+      expect(screen.getByText('Your turn!')).toBeTruthy();
     });
 
-    const cells = screen.getAllByRole('button');
-    // The first few buttons might be navigation, but the board cells have numbers or are empty
-    // Our TicTacToe board uses <button> for cells.
-    // Let's click the first cell.
-    
-    await act(async () => {
-      fireEvent.click(cells[1]); // cells[0] is the Back button
+    it('shows player initials in nav', async () => {
+      render(<TicTacToe />, { wrapper: Wrapper });
+
+      const cb = findEventCb('ttt_roomInfo');
+      await act(async () => {
+        cb(playingRoomInfo);
+      });
+
+      expect(screen.getByText('Al')).toBeTruthy();
+      expect(screen.getByText('Bo')).toBeTruthy();
     });
 
-    expect(mockSocket.emit).toHaveBeenCalledWith('ttt_makeMove', expect.objectContaining({
-      position: 0
-    }));
+    it('shows Rematch button when game ends with win', async () => {
+      render(<TicTacToe />, { wrapper: Wrapper });
+
+      const cb = findEventCb('ttt_roomInfo');
+      await act(async () => {
+        cb(playingRoomInfo);
+      });
+
+      const gameWonCb = findEventCb('ttt_gameWon');
+      await act(async () => {
+        gameWonCb({ winner: 'p1', winningLine: [0, 1, 2] });
+      });
+
+      expect(screen.getByText('Rematch')).toBeTruthy();
+    });
+
+    it('shows Rematch button when game ends with draw', async () => {
+      render(<TicTacToe />, { wrapper: Wrapper });
+
+      const cb = findEventCb('ttt_roomInfo');
+      await act(async () => {
+        cb(playingRoomInfo);
+      });
+
+      const gameDrawCb = findEventCb('ttt_gameDraw');
+      await act(async () => {
+        gameDrawCb();
+      });
+
+      expect(screen.getByText('Rematch')).toBeTruthy();
+    });
+  });
+
+  describe('Making Moves', () => {
+    it('emits ttt_makeMove when a cell is clicked on my turn', async () => {
+      const { container } = render(<TicTacToe />, { wrapper: Wrapper });
+
+      const cb = findEventCb('ttt_roomInfo');
+      await act(async () => {
+        cb(playingRoomInfo);
+      });
+
+      const boardGrid = container.querySelector('.grid.grid-cols-3');
+      expect(boardGrid).toBeTruthy();
+      const cells = boardGrid.querySelectorAll('button');
+
+      await act(async () => {
+        fireEvent.click(cells[0]);
+      });
+
+      expect(mockSocket.emit).toHaveBeenCalledWith('ttt_makeMove', expect.objectContaining({ position: 0 }));
+    });
+  });
+
+  describe('Avatar Selector', () => {
+    it('shows avatar picker in the lobby when no room', () => {
+      render(<TicTacToe />, { wrapper: Wrapper });
+      expect(screen.getByText('🐼')).toBeTruthy();
+      expect(screen.getByText('🦊')).toBeTruthy();
+    });
+
+    it('allows selecting an avatar', async () => {
+      render(<TicTacToe />, { wrapper: Wrapper });
+      const fox = screen.getByText('🦊');
+      await act(async () => {
+        fireEvent.click(fox);
+      });
+      expect(fox.closest('button')).toHaveClass('border-ink');
+    });
   });
 });

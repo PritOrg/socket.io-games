@@ -16,7 +16,7 @@ describe('TextInput', () => {
 
   it('renders label and placeholder', () => {
     render(<TextInput label="Room ID" placeholder="Enter code" />);
-    
+
     expect(screen.getByText('Room ID')).toBeDefined();
     expect(screen.getByPlaceholderText('Enter code')).toBeDefined();
   });

@@ -17,7 +17,11 @@ describe('RetroButton', () => {
 
   it('can be disabled', () => {
     const handleClick = vi.fn();
-    render(<RetroButton onClick={handleClick} disabled>Disabled</RetroButton>);
+    render(
+      <RetroButton onClick={handleClick} disabled>
+        Disabled
+      </RetroButton>,
+    );
 
     const button = screen.getByText('Disabled');
     expect(button).toBeDisabled();
