@@ -48,7 +48,7 @@ class DabManager extends BaseManager {
     }
 
     const maxPlayers = Math.max(2, Math.min(4, customPlayers || 2));
-    const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const roomId = this.generateRoomId();
     socket.join(roomId);
 
     const room = {
@@ -70,8 +70,10 @@ class DabManager extends BaseManager {
         .map(() => Array(cols).fill(null)),
       scores: Array(maxPlayers).fill(0),
       lastMove: null,
+      lastMovePlayerIndex: null,
       lastClaimedBox: null,
       redoRequest: null,
+      redoRequestTimer: null,
       emptyTimer: null,
       forfeitTimer: null,
       maxPlayers,
@@ -169,7 +171,9 @@ class DabManager extends BaseManager {
       .map(() => Array(room.cols).fill(null));
     room.scores = Array(room.maxPlayers).fill(0);
     room.lastMove = null;
+    room.lastMovePlayerIndex = null;
     room.redoRequest = null;
+    room.redoRequestTimer = null;
     room.gameState = 'waiting';
 
     this.io.to(room.id).emit(`${this.gamePrefix}_gameRestarted`);
@@ -194,11 +198,14 @@ class DabManager extends BaseManager {
     if (!room || room.gameState !== 'playing') return;
     if (room.lastMove === null) return;
 
+    // Only the player who made the last move can request a redo
     const playerIndex = room.players.findIndex((p) => p.id === socket.id);
     if (playerIndex === -1) return;
 
-    const immediatePlayerIndex = room.currentTurn;
-    if (playerIndex !== immediatePlayerIndex) {
+    // Check if this player made the last move (stored in lastMove playerIndex context)
+    // We need to track who made the last move - use redoData from moveResult as reference
+    const lastMoverIndex = room.lastMovePlayerIndex;
+    if (playerIndex !== lastMoverIndex) {
       socket.emit(`${this.gamePrefix}_alert`, {
         icon: 'error',
         title: 'Not Allowed',
@@ -207,23 +214,20 @@ class DabManager extends BaseManager {
       return;
     }
 
-    const prevPlayerIndex = (playerIndex + room.players.length - 1) % room.players.length;
-    const prevPlayer = room.players[prevPlayerIndex];
-    if (!prevPlayer || !prevPlayer.connected) {
-      socket.emit(`${this.gamePrefix}_alert`, {
-        icon: 'error',
-        title: 'Error',
-        text: 'Previous player not connected.',
-      });
-      return;
+    // Determine who can respond (the next player in turn order)
+    const nextPlayerIndex = this.getNextTurn(room);
+
+    // Clear any existing redo request timer
+    if (room.redoRequestTimer) {
+      clearTimeout(room.redoRequestTimer);
+      room.redoRequestTimer = null;
     }
 
     room.redoRequest = {
       requesterId: socket.id,
       requesterIndex: playerIndex,
       requesterName: room.players[playerIndex].name,
-      targetId: prevPlayer.id,
-      targetIndex: prevPlayerIndex,
+      targetId: room.players[nextPlayerIndex].id,
       lastMove: room.lastMove ? { ...room.lastMove } : null,
       claimedBox: room.lastClaimedBox || null,
     };
@@ -278,8 +282,10 @@ class DabManager extends BaseManager {
       }
 
       room.lastMove = null;
+      room.lastMovePlayerIndex = null;
       room.lastClaimedBox = null;
-      room.currentTurn = room.redoRequest.targetIndex;
+      // Turn goes to the requester (who made the original move being redone)
+      room.currentTurn = room.redoRequest.requesterIndex;
 
       this.io.to(room.id).emit(`${this.gamePrefix}_moveUndone`, {
         horizontalLines: room.horizontalLines,
@@ -365,6 +371,13 @@ class DabManager extends BaseManager {
     }
 
     room.lastMove = { lineType, r, c };
+    room.lastMovePlayerIndex = playerIndex;
+
+    // Clear any pending redo request when a new move is made
+    if (room.redoRequest) {
+      room.redoRequest = null;
+      room.redoRequestTimer = null;
+    }
 
     const claimedBoxes = this.checkBoxes(room, r, c, lineType, playerIndex);
 

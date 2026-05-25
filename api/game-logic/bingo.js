@@ -36,6 +36,7 @@ class BingoManager extends BaseManager {
       strikedNumbers: [],
       markedNumbers: {},
       playerBoards: {},
+      playerBingos: {},
     };
     this.rooms.set(roomId, room);
     this._trackSocket(socket.id, roomId);
@@ -113,6 +114,8 @@ class BingoManager extends BaseManager {
         [nums[i], nums[j]] = [nums[j], nums[i]];
       }
       room.playerBoards[player.id] = nums;
+      room.playerBingos[player.id] = 0;
+      room.markedNumbers[player.id] = [];
     });
 
     this.io.to(sanitizedRoomId).emit(`${this.gamePrefix}_gameStarted`, {
@@ -130,10 +133,54 @@ class BingoManager extends BaseManager {
     room.strikedNumbers = [];
     room.markedNumbers = {};
     room.playerBoards = {};
+    room.playerBingos = {};
     room.gameState = 'ready';
     room.currentTurn = room.players[0].id;
     this.io.to(sanitizedRoomId).emit(`${this.gamePrefix}_gameRestarted`);
     this.sendRoomInfo(sanitizedRoomId);
+  }
+
+  getBingoLinesForPlayer(room, playerId) {
+    const playerBoard = room.playerBoards[playerId];
+    if (!playerBoard) return [];
+
+    const lines = [
+      [0, 1, 2, 3, 4],
+      [5, 6, 7, 8, 9],
+      [10, 11, 12, 13, 14],
+      [15, 16, 17, 18, 19],
+      [20, 21, 22, 23, 24],
+      [0, 5, 10, 15, 20],
+      [1, 6, 11, 16, 21],
+      [2, 7, 12, 17, 22],
+      [3, 8, 13, 18, 23],
+      [4, 9, 14, 19, 24],
+      [0, 6, 12, 18, 24],
+      [4, 8, 12, 16, 20],
+    ];
+
+    return lines.filter((line) => line.every((idx) => room.strikedNumbers.includes(playerBoard[idx])));
+  }
+
+  checkAndBroadcastBingo(room, playerId) {
+    const completedLines = this.getBingoLinesForPlayer(room, playerId);
+    const newBingoCount = completedLines.length;
+    const oldBingoCount = room.playerBingos[playerId] || 0;
+
+    if (newBingoCount > oldBingoCount) {
+      room.playerBingos[playerId] = newBingoCount;
+
+      this.io.to(room.id).emit(`${this.gamePrefix}_bingoProgress`, {
+        playerId,
+        bingoCount: newBingoCount,
+        completedLines: completedLines.length,
+      });
+
+      if (newBingoCount >= 5) {
+        return true;
+      }
+    }
+    return false;
   }
 
   markNumber(socket, { roomId, number }) {
@@ -162,10 +209,21 @@ class BingoManager extends BaseManager {
 
     room.strikedNumbers.push(number);
 
-    if (!room.markedNumbers[socket.id]) {
-      room.markedNumbers[socket.id] = [];
+    // Get all other players to check their bingo progress
+    const otherPlayers = room.players.filter((p) => p.id !== socket.id);
+
+    // Check bingo progress for current player
+    if (this.checkAndBroadcastBingo(room, socket.id)) {
+      room.gameState = 'ended';
+      this.io.to(roomIdSanitized).emit(`${this.gamePrefix}_playerWon`, socket.id);
+      this.sendRoomInfo(roomIdSanitized);
+      return;
     }
-    room.markedNumbers[socket.id].push(number);
+
+    // Check bingo progress for all other players
+    for (const player of otherPlayers) {
+      this.checkAndBroadcastBingo(room, player.id);
+    }
 
     const currentIndex = room.turnOrder.indexOf(socket.id);
     const nextIndex = (currentIndex + 1) % room.turnOrder.length;
@@ -180,6 +238,7 @@ class BingoManager extends BaseManager {
       number,
       nextTurn: room.currentTurn,
       strikedNumbers: room.strikedNumbers,
+      markedBy: socket.id,
     });
     this.io.to(roomIdSanitized).emit(`${this.gamePrefix}_nextTurn`, {
       nextPlayerId: room.currentTurn,
@@ -219,22 +278,7 @@ class BingoManager extends BaseManager {
       return;
     }
 
-    const lines = [
-      [0, 1, 2, 3, 4],
-      [5, 6, 7, 8, 9],
-      [10, 11, 12, 13, 14],
-      [15, 16, 17, 18, 19],
-      [20, 21, 22, 23, 24],
-      [0, 5, 10, 15, 20],
-      [1, 6, 11, 16, 21],
-      [2, 7, 12, 17, 22],
-      [3, 8, 13, 18, 23],
-      [4, 9, 14, 19, 24],
-      [0, 6, 12, 18, 24],
-      [4, 8, 12, 16, 20],
-    ];
-
-    const completedLines = lines.filter((line) => line.every((idx) => room.strikedNumbers.includes(playerBoard[idx])));
+    const completedLines = this.getBingoLinesForPlayer(room, socket.id);
     if (completedLines.length < 5) {
       socket.emit(`${this.gamePrefix}_alert`, {
         icon: 'error',
@@ -267,7 +311,7 @@ class BingoManager extends BaseManager {
         });
       } else if (activeCount === 1) {
         room.gameState = 'paused';
-        this.io.to(room.id).emit('bingo_gamePaused', { reason: 'Opponent disconnected' });
+        this.io.to(room.id).emit(`${this.gamePrefix}_gamePaused`, { reason: 'Opponent disconnected' });
       }
     } else {
       room.players.splice(playerIndex, 1);
@@ -282,7 +326,7 @@ class BingoManager extends BaseManager {
     }
 
     this._untrackSocket(socket.id, room.id);
-    this.io.to(room.id).emit('bingo_playerLeft', { playerId: socket.id });
+    this.io.to(room.id).emit(`${this.gamePrefix}_playerLeft`, { playerId: socket.id });
     this.sendRoomInfo(room.id);
   }
 

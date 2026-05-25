@@ -77,8 +77,8 @@ describe('Ultimate Tic-Tac-Toe (UTTT) Game Logic', function () {
 
     it('should prevent move if it is not player turn', (done) => {
       player2.emit('uttt_makeMove', { roomId, gridIndex: 4, squareIndex: 4 });
-      player2.once('uttt_error', (error) => {
-        expect(error.message).to.equal('Not your turn');
+      player2.once('uttt_alert', (alert) => {
+        expect(alert.text).to.equal('Not your turn');
         done();
       });
     });
@@ -88,8 +88,8 @@ describe('Ultimate Tic-Tac-Toe (UTTT) Game Logic', function () {
 
       player1.once('uttt_gameState', () => {
         player2.emit('uttt_makeMove', { roomId, gridIndex: 0, squareIndex: 0 });
-        player2.once('uttt_error', (error) => {
-          expect(error.message).to.contain('Must play in grid 4');
+        player2.once('uttt_alert', (alert) => {
+          expect(alert.text).to.contain('Must play in grid 4');
           done();
         });
       });
@@ -99,8 +99,8 @@ describe('Ultimate Tic-Tac-Toe (UTTT) Game Logic', function () {
       player1.emit('uttt_makeMove', { roomId, gridIndex: 4, squareIndex: 4 });
       player1.once('uttt_gameState', () => {
         player2.emit('uttt_makeMove', { roomId, gridIndex: 4, squareIndex: 4 });
-        player2.once('uttt_error', (error) => {
-          expect(error.message).to.equal('Square already occupied');
+        player2.once('uttt_alert', (alert) => {
+          expect(alert.text).to.equal('Square already occupied');
           done();
         });
       });

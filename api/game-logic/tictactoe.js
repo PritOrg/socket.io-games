@@ -41,7 +41,7 @@ class TicTacToeManager extends BaseManager {
   }
 
   createRoom(socket, playerName) {
-    const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const roomId = this.generateRoomId();
     socket.join(roomId);
     const room = {
       id: roomId,

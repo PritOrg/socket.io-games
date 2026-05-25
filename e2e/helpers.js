@@ -15,9 +15,16 @@ async function setPlayerNames(page1, page2, name1, name2) {
   await setPlayerName(page2, name2);
 }
 
+const gameLabels = {
+  '/bingo': 'Bingo',
+  '/tictactoe': 'Tic Tac Toe',
+  '/uttt': 'Ultimate Tic-Tac-Toe',
+  '/dab': 'Dots',
+};
+
 async function navigateToGame(page, gamePath) {
-  await page.goto(gamePath);
-  await page.waitForLoadState('networkidle');
+  await page.goto(gamePath, { waitUntil: 'load', timeout: 30000 });
+  await page.waitForTimeout(1500);
 }
 
 async function clickCreateRoom(page, buttonText = 'Create Room') {
@@ -27,19 +34,13 @@ async function clickCreateRoom(page, buttonText = 'Create Room') {
 async function getRoomCode(page) {
   const roomBtn = page.locator('button[title="Click to copy room ID"]');
   await roomBtn.waitFor({ state: 'visible', timeout: 10000 });
-  // Wait for text content to be non-empty (with shorter timeout)
-  try {
-    await page.waitForFunction(
-      () => {
-        const btn = document.querySelector('button[title="Click to copy room ID"]');
-        return btn && btn.textContent && btn.textContent.trim().length > 0;
-      },
-      { timeout: 5000 },
-    );
-  } catch {
-    // Fallback: wait a bit more and try anyway
-    await page.waitForTimeout(1000);
+  // Poll for non-empty text content
+  for (let i = 0; i < 30; i++) {
+    const text = await roomBtn.textContent();
+    if (text && text.trim().length > 0) return text.trim();
+    await page.waitForTimeout(500);
   }
+  // Fallback
   const text = await roomBtn.textContent();
   return text.trim();
 }

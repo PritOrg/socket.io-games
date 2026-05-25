@@ -30,23 +30,13 @@ test.describe('DAB E2E', () => {
     await page2.locator('.swal2-input').fill(roomCode);
     await page2.locator('.swal2-confirm').click();
 
-    // Wait for Start Game button to appear (indicates both players are in)
-    await page1.locator('button:has-text("Start Game!")').waitFor({ state: 'visible', timeout: 10000 });
-
-    // Dismiss any modals
-    await dismissSwalIfPresent(page1);
-    await dismissSwalIfPresent(page2);
-
-    // Creator clicks Start Game button
-    await page1.locator('button:has-text("Start Game!")').click({ force: true });
-
-    // Wait for game to start - wait for scoreboard to appear
+    // Game auto-starts when second player joins
+    // Wait for scoreboard to appear on both pages
+    // The "Game Started!" SweetAlert auto-dismisses after 1500ms
     await page1.locator('text=Scoreboard').waitFor({ state: 'visible', timeout: 10000 });
     await page2.locator('text=Scoreboard').waitFor({ state: 'visible', timeout: 10000 });
-
-    // Dismiss the "Game Started!" modal if present
-    await dismissSwalIfPresent(page1);
-    await dismissSwalIfPresent(page2);
+    await page1.waitForTimeout(2000);
+    await page2.waitForTimeout(2000);
 
     // Both should see game title
     await expect(page1.locator('text=Dots')).toBeVisible();

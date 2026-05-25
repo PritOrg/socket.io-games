@@ -93,7 +93,7 @@ class UTTTManager extends BaseManager {
   }
 
   createRoom(socket, playerName) {
-    const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const roomId = this.generateRoomId();
     socket.join(roomId);
     const room = {
       id: roomId,
@@ -121,12 +121,20 @@ class UTTTManager extends BaseManager {
     const room = this.rooms.get(roomIdSanitized);
     if (!room) {
       logger.warn('UTTT', `Join failed: Room ${roomId} not found`);
-      socket.emit(`${this.gamePrefix}_error`, { message: 'Room not found' });
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Error',
+        text: 'Room not found',
+      });
       return;
     }
     if (room.players.length >= 2) {
       logger.warn('UTTT', `Join failed: Room ${roomId} is full`);
-      socket.emit(`${this.gamePrefix}_error`, { message: 'Room is full' });
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Error',
+        text: 'Room is full',
+      });
       return;
     }
 
@@ -172,33 +180,61 @@ class UTTTManager extends BaseManager {
     const room = this.rooms.get(roomIdSanitized);
     if (!room) {
       logger.warn('UTTT', `Move failed: Room ${roomId} not found`);
-      socket.emit(`${this.gamePrefix}_error`, { message: 'Room not found' });
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Error',
+        text: 'Room not found',
+      });
       return;
     }
     if (room.gameState !== 'playing') {
       logger.warn('UTTT', `Move failed: Game not active in ${roomId}`);
-      socket.emit(`${this.gamePrefix}_error`, { message: 'Game is not in progress' });
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Error',
+        text: 'Game is not in progress',
+      });
       return;
     }
     if (room.currentTurn !== socket.id) {
       logger.warn('UTTT', `Move failed: Not ${socket.id}'s turn in ${roomId}`);
-      socket.emit(`${this.gamePrefix}_error`, { message: 'Not your turn' });
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Error',
+        text: 'Not your turn',
+      });
       return;
     }
     if (typeof gridIndex !== 'number' || gridIndex < 0 || gridIndex > 8) {
-      socket.emit(`${this.gamePrefix}_error`, { message: 'Invalid grid index' });
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Error',
+        text: 'Invalid grid index',
+      });
       return;
     }
     if (typeof squareIndex !== 'number' || squareIndex < 0 || squareIndex > 8) {
-      socket.emit(`${this.gamePrefix}_error`, { message: 'Invalid square index' });
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Error',
+        text: 'Invalid square index',
+      });
       return;
     }
     if (room.activeGrid !== null && room.activeGrid !== gridIndex) {
-      socket.emit(`${this.gamePrefix}_error`, { message: `Must play in grid ${room.activeGrid}` });
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Error',
+        text: `Must play in grid ${room.activeGrid}`,
+      });
       return;
     }
     if (room.board[gridIndex][squareIndex] !== null) {
-      socket.emit(`${this.gamePrefix}_error`, { message: 'Square already occupied' });
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Error',
+        text: 'Square already occupied',
+      });
       return;
     }
 
@@ -362,13 +398,21 @@ class UTTTManager extends BaseManager {
     const roomIdSanitized = this.sanitizeRoomId(roomId);
     const room = this.rooms.get(roomIdSanitized);
     if (!room) {
-      socket.emit(`${this.gamePrefix}_error`, { message: 'Room not found' });
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Error',
+        text: 'Room not found',
+      });
       return;
     }
 
     const player = room.players.find((p) => p.id === playerId);
     if (!player) {
-      socket.emit(`${this.gamePrefix}_error`, { message: 'Player not found' });
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Error',
+        text: 'Player not found',
+      });
       return;
     }
 

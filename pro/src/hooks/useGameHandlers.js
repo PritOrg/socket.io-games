@@ -1,9 +1,11 @@
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
+import { sketchPopupClass } from '../components/ui';
 
-const useGameHandlers = (socket, roomId, gamePrefix) => {
+const useGameHandlers = (socket, roomId, gamePrefix, options = {}) => {
   const navigate = useNavigate();
+  const { onLeave, softLeave = false } = options;
 
   const handleCreateRoom = useCallback(
     (options) => {
@@ -34,11 +36,20 @@ const useGameHandlers = (socket, roomId, gamePrefix) => {
       showCancelButton: true,
       confirmButtonText: 'Leave',
       cancelButtonText: 'Stay',
+      customClass: { popup: sketchPopupClass },
     });
     if (!result.isConfirmed) return;
-    socket?.disconnect();
+
+    if (softLeave && roomId) {
+      socket?.emit(`${gamePrefix}_leaveRoom`, roomId);
+    }
+
+    onLeave?.();
+    if (!softLeave) {
+      socket?.disconnect();
+    }
     navigate('/');
-  }, [socket, navigate]);
+  }, [socket, navigate, roomId, gamePrefix, onLeave, softLeave]);
 
   return { handleCreateRoom, handleJoinRoom, handleStartGame, handleLeaveRoom };
 };

@@ -16,9 +16,10 @@ test.describe('Bingo E2E', () => {
     const page1 = await ctx.newPage();
     const page2 = await ctx.newPage();
 
+    await page1.addInitScript(() => localStorage.setItem('playerName', 'Alice'));
+    await page2.addInitScript(() => localStorage.setItem('playerName', 'Bob'));
     await page1.goto('/');
     await page2.goto('/');
-    await setPlayerNames(page1, page2, 'Alice', 'Bob');
 
     // Navigate and create room
     await navigateToGame(page1, '/bingo');

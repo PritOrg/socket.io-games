@@ -1,9 +1,15 @@
+const { v4: uuidv4 } = require('uuid');
+
 class BaseManager {
   constructor(io) {
     this.io = io;
     this.rooms = new Map();
     this.timers = new Map();
     this.socketRooms = new Map();
+  }
+
+  generateRoomId() {
+    return uuidv4().slice(0, 6).toUpperCase();
   }
 
   _trackSocket(socketId, roomId) {
@@ -107,6 +113,19 @@ class BaseManager {
     }
 
     if (roomCallbacks?.onUpdateRoom) roomCallbacks.onUpdateRoom(room, roomId);
+  }
+
+  clearAllTimersForRoom(roomId) {
+    const keysToDelete = [];
+    for (const key of this.timers.keys()) {
+      if (key.includes(roomId)) {
+        clearTimeout(this.timers.get(key));
+        keysToDelete.push(key);
+      }
+    }
+    for (const key of keysToDelete) {
+      this.timers.delete(key);
+    }
   }
 }
 
