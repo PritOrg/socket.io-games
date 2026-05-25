@@ -109,6 +109,12 @@ class DabManager extends BaseManager {
     room.players.push({ id: socket.id, name: playerName, connected: true });
     this._trackSocket(socket.id, room.id);
 
+    if (room.players.length >= room.maxPlayers) {
+      room.gameState = 'playing';
+      room.currentTurn = 0;
+      this.io.to(room.id).emit(`${this.gamePrefix}_gameStarted`, { firstTurn: room.players[0].id });
+    }
+
     this.sendRoomInfo(room.id);
   }
 

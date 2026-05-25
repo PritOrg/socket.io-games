@@ -205,8 +205,8 @@ describe('PaperParty Backend Tests', function () {
             player2.emit('uttt_makeMove', { roomId, gridIndex: 0, squareIndex: 0 });
           });
 
-          player2.once('uttt_error', (error) => {
-            expect(error.message).to.contain('Must play in grid 2');
+          player2.once('uttt_alert', (error) => {
+            expect(error.text).to.contain('Must play in grid 2');
             done();
           });
         });
