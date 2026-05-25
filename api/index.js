@@ -9,6 +9,8 @@ const BingoManager = require('./game-logic/bingo');
 const TicTacToeManager = require('./game-logic/tictactoe');
 const UTTTManager = require('./game-logic/uttt');
 const DabManager = require('./game-logic/dab');
+const SOSManager = require('./game-logic/sos');
+const Connect4Manager = require('./game-logic/connect4');
 
 const app = express();
 
@@ -61,6 +63,8 @@ const bingoManager = new BingoManager(io);
 const tictactoeManager = new TicTacToeManager(io);
 const utttManager = new UTTTManager(io);
 const dabManager = new DabManager(io);
+const sosManager = new SOSManager(io);
+const connect4Manager = new Connect4Manager(io);
 
 io.on('connection', (socket) => {
   logger.info('SERVER', `User connected: ${socket.id}`, { ip: socket.handshake.address });
@@ -69,6 +73,8 @@ io.on('connection', (socket) => {
   tictactoeManager.handleConnection(socket);
   utttManager.handleConnection(socket);
   dabManager.handleConnection(socket);
+  sosManager.handleConnection(socket);
+  connect4Manager.handleConnection(socket);
 
   socket.on('disconnect', (reason) => {
     logger.warn('SERVER', `User disconnected: ${socket.id}`, { reason });
@@ -89,13 +95,15 @@ app.get('/stats', (req, res) => {
     tictactoe: { rooms: tictactoeManager.rooms.size },
     uttt: { rooms: utttManager.rooms.size },
     dab: { rooms: dabManager.rooms.size },
+    sos: { rooms: sosManager.rooms.size },
+    connect4: { rooms: connect4Manager.rooms.size },
     connections: io.engine.clientsCount,
   });
 });
 
 app.post('/cleanup', (req, res) => {
   let cleaned = 0;
-  for (const manager of [bingoManager, tictactoeManager, utttManager, dabManager]) {
+  for (const manager of [bingoManager, tictactoeManager, utttManager, dabManager, sosManager, connect4Manager]) {
     for (const [id, room] of manager.rooms) {
       const allGone = room.players.every((p) => !p.connected);
       if (allGone) {
@@ -110,7 +118,7 @@ app.post('/cleanup', (req, res) => {
 function shutdown() {
   logger.warn('SERVER', 'Shutting down gracefully...');
 
-  for (const manager of [bingoManager, tictactoeManager, utttManager, dabManager]) {
+  for (const manager of [bingoManager, tictactoeManager, utttManager, dabManager, sosManager, connect4Manager]) {
     for (const [id] of manager.rooms) {
       io.to(id).emit('server_shutdown', { message: 'Server is shutting down' });
     }
@@ -132,4 +140,14 @@ if (process.env.NODE_ENV !== 'test') {
   });
 }
 
-module.exports = { server, io, bingoManager, tictactoeManager, utttManager, dabManager, shutdown };
+module.exports = {
+  server,
+  io,
+  bingoManager,
+  tictactoeManager,
+  utttManager,
+  dabManager,
+  sosManager,
+  connect4Manager,
+  shutdown,
+};

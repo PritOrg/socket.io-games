@@ -71,6 +71,33 @@ const DotsAndBoxesIcon = () => (
   </svg>
 );
 
+const SOSIcon = () => (
+  <svg viewBox="0 0 48 48" className="w-full h-full">
+    <rect x="4" y="4" width="40" height="40" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="4 2" />
+    <text x="12" y="16" className="text-sm font-bold" fill="currentColor">
+      S
+    </text>
+    <text x="24" y="28" className="text-sm font-bold" fill="currentColor">
+      O
+    </text>
+    <text x="36" y="40" className="text-sm font-bold" fill="currentColor">
+      S
+    </text>
+  </svg>
+);
+
+const Connect4Icon = () => (
+  <svg viewBox="0 0 48 48" className="w-full h-full">
+    <rect x="4" y="8" width="40" height="32" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="4 2" />
+    <circle cx="12" cy="16" r="4" fill="#ef4444" />
+    <circle cx="24" cy="16" r="4" fill="#eab308" />
+    <circle cx="36" cy="16" r="4" fill="#ef4444" />
+    <circle cx="12" cy="28" r="4" fill="#eab308" />
+    <circle cx="24" cy="28" r="4" fill="#ef4444" />
+    <circle cx="36" cy="28" r="4" fill="#eab308" />
+  </svg>
+);
+
 const ComingSoonIcon = () => (
   <svg viewBox="0 0 48 48" className="w-full h-full" fill="none" stroke="currentColor" strokeWidth="1.5">
     <circle cx="24" cy="24" r="20" strokeDasharray="6 4" />
@@ -187,7 +214,7 @@ const PaperPartyLanding = () => {
         </div>
       </div>
 
-      <div className="relative grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 max-w-3xl w-full px-2">
+      <div className="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 max-w-4xl w-full px-2">
         <GameCard
           title="Bingo"
           description="The classic 5x5 numbers game. Race to cross out your lines and shout BINGO!"
@@ -216,16 +243,20 @@ const PaperPartyLanding = () => {
           accentColor="orange"
           onClick={() => navigate('/dab')}
         />
-
-        <div className="sm:col-span-2">
-          <GameCard
-            title="More Games Coming Soon"
-            description="We're doodling new games in the margins. Stay tuned for Paper Chase, Hangman, and more!"
-            icon={ComingSoonIcon}
-            accentColor="gray"
-            badge="SOON"
-          />
-        </div>
+        <GameCard
+          title="SOS"
+          description="Place S or O to form SOS patterns. Quick to learn, hard to master!"
+          icon={SOSIcon}
+          accentColor="red"
+          onClick={() => navigate('/sos')}
+        />
+        <GameCard
+          title="Connect 4"
+          description="Drop discs to get 4 in a row. Classic gravity gameplay with smooth animations!"
+          icon={Connect4Icon}
+          accentColor="yellow"
+          onClick={() => navigate('/connect4')}
+        />
       </div>
 
       {playerName && (
