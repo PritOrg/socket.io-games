@@ -157,13 +157,17 @@ describe('Dots & Boxes (DAB) Game Logic', function () {
     });
 
     it('should start game when second player joins', (done) => {
+      let timeout = setTimeout(() => done(new Error('timeout')), 1500);
       player1.emit('dab_createRoom', { mode: 'custom', customRows: 3, customCols: 3, customPlayers: 2 });
       player1.once('dab_roomInfo', (room) => {
         player2.emit('dab_joinRoom', { roomId: room.id, playerName: 'Bob' });
-        player1.once('dab_gameStarted', () => {
-          done();
+        player2.once('dab_roomInfo', () => {
+          player1.emit('dab_startGame', { roomId: room.id });
+          player1.once('dab_gameStarted', () => {
+            clearTimeout(timeout);
+            done();
+          });
         });
-        player1.emit('dab_startGame', { roomId: room.id });
       });
     });
 

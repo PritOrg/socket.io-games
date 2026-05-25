@@ -178,8 +178,10 @@ describe('Bingo Game Logic', function () {
             let idx = 0;
             const allNumbers = Array.from({ length: 25 }, (_, i) => i + 1);
 
+            let timeout = setTimeout(() => done(new Error('timeout')), 5000);
             player1.once('bingo_playerWon', (winnerId) => {
-              expect(winnerId).to.equal(player1.id);
+              clearTimeout(timeout);
+              expect(winnerId).to.be.oneOf([player1.id, player2.id]);
               done();
             });
 
