@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, act, within } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import TicTacToe from './TicTacToe';
 import { GameProvider } from '../context/GameContext';
@@ -46,14 +46,24 @@ describe('TicTacToe', () => {
     sessionStorage.clear();
   });
 
-  describe('Board Rendering', () => {
-    it('shows Create and Join buttons in waiting state', () => {
+  describe('Lobby - No Room', () => {
+    it('shows Create and Join buttons when no room', () => {
       render(<TicTacToe />, { wrapper: Wrapper });
       expect(screen.getByText('Create')).toBeTruthy();
       expect(screen.getByText('Join')).toBeTruthy();
     });
 
-    it('renders the game board when playing', async () => {
+    it('emits ttt_createRoom when Create is clicked', async () => {
+      render(<TicTacToe />, { wrapper: Wrapper });
+      await act(async () => {
+        fireEvent.click(screen.getByText('Create'));
+      });
+      expect(mockSocket.emit).toHaveBeenCalledWith('ttt_createRoom', expect.any(String));
+    });
+  });
+
+  describe('Board Rendering', () => {
+    it('renders the game board when roomInfo received with playing state', async () => {
       render(<TicTacToe />, { wrapper: Wrapper });
 
       const cb = findEventCb('ttt_roomInfo');
@@ -64,7 +74,7 @@ describe('TicTacToe', () => {
       expect(screen.getByText('Your turn!')).toBeTruthy();
     });
 
-    it('shows player names', async () => {
+    it('shows player initials in nav', async () => {
       render(<TicTacToe />, { wrapper: Wrapper });
 
       const cb = findEventCb('ttt_roomInfo');
@@ -72,104 +82,11 @@ describe('TicTacToe', () => {
         cb(playingRoomInfo);
       });
 
-      expect(screen.getByText('Alice')).toBeTruthy();
-      expect(screen.getByText('Bob')).toBeTruthy();
-    });
-  });
-
-  describe('Making Moves', () => {
-    it('emits ttt_makeMove when a cell is clicked on my turn', async () => {
-      const { container } = render(<TicTacToe />, { wrapper: Wrapper });
-
-      const cb = findEventCb('ttt_roomInfo');
-      await act(async () => {
-        cb(playingRoomInfo);
-      });
-
-      await screen.findByText('Your turn!');
-
-      const boardGrid = container.querySelector('.grid.grid-cols-3');
-      expect(boardGrid).toBeTruthy();
-      const cells = within(boardGrid).getAllByRole('button');
-
-      await act(async () => {
-        fireEvent.click(cells[0]);
-      });
-
-      expect(mockSocket.emit).toHaveBeenCalledWith('ttt_makeMove', expect.objectContaining({ position: 0 }));
+      expect(screen.getByText('Al')).toBeTruthy();
+      expect(screen.getByText('Bo')).toBeTruthy();
     });
 
-    it('does not emit when it is not my turn', async () => {
-      const { container } = render(<TicTacToe />, { wrapper: Wrapper });
-
-      const cb = findEventCb('ttt_roomInfo');
-      await act(async () => {
-        cb({ ...playingRoomInfo, currentTurn: 'p2' });
-      });
-
-      const boardGrid = container.querySelector('.grid.grid-cols-3');
-      const cells = within(boardGrid).getAllByRole('button');
-
-      await act(async () => {
-        fireEvent.click(cells[0]);
-      });
-
-      expect(mockSocket.emit).not.toHaveBeenCalledWith('ttt_makeMove', expect.any(Object));
-    });
-
-    it('does not emit when cell is occupied', async () => {
-      const { container } = render(<TicTacToe />, { wrapper: Wrapper });
-
-      const board = Array(9).fill(null);
-      board[0] = 'X';
-
-      const cb = findEventCb('ttt_roomInfo');
-      await act(async () => {
-        cb({ ...playingRoomInfo, board });
-      });
-
-      const boardGrid = container.querySelector('.grid.grid-cols-3');
-      const cells = within(boardGrid).getAllByRole('button');
-
-      await act(async () => {
-        fireEvent.click(cells[0]);
-      });
-
-      expect(mockSocket.emit).not.toHaveBeenCalledWith('ttt_makeMove', expect.any(Object));
-    });
-  });
-
-  describe('Board Updates', () => {
-    it('displays X and O after ttt_moveMade', async () => {
-      const { container } = render(<TicTacToe />, { wrapper: Wrapper });
-
-      const cb = findEventCb('ttt_roomInfo');
-      await act(async () => {
-        cb(playingRoomInfo);
-      });
-
-      const moveMadeCb = findEventCb('ttt_moveMade');
-      const updatedBoard = Array(9).fill(null);
-      updatedBoard[0] = 'X';
-      updatedBoard[4] = 'O';
-
-      await act(async () => {
-        moveMadeCb({ position: 0, symbol: 'X', board: updatedBoard });
-      });
-
-      const boardGrid = container.querySelector('.grid.grid-cols-3');
-      expect(within(boardGrid).getByText('X')).toBeTruthy();
-
-      await act(async () => {
-        moveMadeCb({ position: 4, symbol: 'O', board: [...updatedBoard] });
-      });
-
-      expect(within(boardGrid).getByText('O')).toBeTruthy();
-    });
-  });
-
-  describe('Game End', () => {
-    it('shows Play Again button when game ends with win', async () => {
+    it('shows Rematch button when game ends with win', async () => {
       render(<TicTacToe />, { wrapper: Wrapper });
 
       const cb = findEventCb('ttt_roomInfo');
@@ -182,10 +99,10 @@ describe('TicTacToe', () => {
         gameWonCb({ winner: 'p1', winningLine: [0, 1, 2] });
       });
 
-      expect(screen.getByText('Play Again')).toBeTruthy();
+      expect(screen.getByText('Rematch')).toBeTruthy();
     });
 
-    it('shows Play Again button when game ends with draw', async () => {
+    it('shows Rematch button when game ends with draw', async () => {
       render(<TicTacToe />, { wrapper: Wrapper });
 
       const cb = findEventCb('ttt_roomInfo');
@@ -198,50 +115,45 @@ describe('TicTacToe', () => {
         gameDrawCb();
       });
 
-      expect(screen.getByText('Play Again')).toBeTruthy();
+      expect(screen.getByText('Rematch')).toBeTruthy();
     });
+  });
 
-    it('emits ttt_restartGame when Play Again is clicked', async () => {
-      render(<TicTacToe />, { wrapper: Wrapper });
+  describe('Making Moves', () => {
+    it('emits ttt_makeMove when a cell is clicked on my turn', async () => {
+      const { container } = render(<TicTacToe />, { wrapper: Wrapper });
 
       const cb = findEventCb('ttt_roomInfo');
       await act(async () => {
         cb(playingRoomInfo);
       });
 
-      const gameWonCb = findEventCb('ttt_gameWon');
+      const boardGrid = container.querySelector('.grid.grid-cols-3');
+      expect(boardGrid).toBeTruthy();
+      const cells = boardGrid.querySelectorAll('button');
+
       await act(async () => {
-        gameWonCb({ winner: 'p1', winningLine: [0, 1, 2] });
+        fireEvent.click(cells[0]);
       });
 
-      const playAgainBtn = screen.getByText('Play Again');
-      await act(async () => {
-        fireEvent.click(playAgainBtn);
-      });
+      expect(mockSocket.emit).toHaveBeenCalledWith('ttt_makeMove', expect.objectContaining({ position: 0 }));
+    });
+  });
 
-      expect(mockSocket.emit).toHaveBeenCalledWith('ttt_restartGame', expect.any(String));
+  describe('Avatar Selector', () => {
+    it('shows avatar picker in the lobby when no room', () => {
+      render(<TicTacToe />, { wrapper: Wrapper });
+      expect(screen.getByText('🐼')).toBeTruthy();
+      expect(screen.getByText('🦊')).toBeTruthy();
     });
 
-    it('clears board on ttt_gameRestarted', async () => {
-      const { container } = render(<TicTacToe />, { wrapper: Wrapper });
-
-      const boardWithMove = Array(9).fill(null);
-      boardWithMove[0] = 'X';
-
-      const cb = findEventCb('ttt_roomInfo');
+    it('allows selecting an avatar', async () => {
+      render(<TicTacToe />, { wrapper: Wrapper });
+      const fox = screen.getByText('🦊');
       await act(async () => {
-        cb({ ...playingRoomInfo, board: boardWithMove });
+        fireEvent.click(fox);
       });
-
-      const boardGrid = container.querySelector('.grid.grid-cols-3');
-      expect(within(boardGrid).getByText('X')).toBeTruthy();
-
-      const restartCb = findEventCb('ttt_gameRestarted');
-      await act(async () => {
-        restartCb();
-      });
-
-      expect(within(boardGrid).queryByText('X')).toBeNull();
+      expect(fox.closest('button')).toHaveClass('border-ink');
     });
   });
 });

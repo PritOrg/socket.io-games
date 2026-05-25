@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useGameContext } from '../context/GameContext';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
-import { SketchButton, SketchCard, SketchBorder, sketchPopupClass, GameLayout } from '../components/ui';
+import { SketchButton, SketchCard, sketchPopupClass, GameLayout, AvatarSelector, MatchReport } from '../components/ui';
 import useSound from 'use-sound';
 import confetti from 'canvas-confetti';
 import Swal from 'sweetalert2';
@@ -9,10 +9,8 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Users, Trophy, SwatchBook, Plus, Minus, RotateCcw, Undo2 } from 'lucide-react';
 import logger from '../utils/logger';
 
-// Sketch-style pen colors (ink colors)
 const PLAYER_COLORS = ['#1a1a2e', '#c73e1d', '#2d4a8f', '#2f5233'];
 
-// Helper function to add wobble to lines for hand-drawn effect
 const addWobble = (x1, y1, x2, y2, seed = 0) => {
   const segments = 8;
   const wobbleAmount = 1.5;
@@ -23,7 +21,6 @@ const addWobble = (x1, y1, x2, y2, seed = 0) => {
     const x = x1 + (x2 - x1) * t;
     const y = y1 + (y2 - y1) * t;
 
-    // Add controlled randomness based on seed
     const offsetX = Math.sin(seed + i * 2.3) * wobbleAmount;
     const offsetY = Math.cos(seed + i * 1.7) * wobbleAmount;
 
@@ -57,6 +54,8 @@ const DabGame = () => {
   const [myPlayerIndex, setMyPlayerIndex] = useState(-1);
   const [isPaused, setIsPaused] = useState(false);
   const [redoRequest, setRedoRequest] = useState(null);
+  const [avatar, setAvatar] = useState('🐼');
+  const [avatarColor, setAvatarColor] = useState('#1a1a2e');
 
   const [playLine] = useSound('/sounds/move.mp3', { volume: 0.5 });
   const [playBox] = useSound('/sounds/win.mp3', { volume: 0.7 });
@@ -64,13 +63,6 @@ const DabGame = () => {
   const reconnectAttempted = useRef(false);
 
   const handleCreateRoom = useCallback(() => {
-    logger.socket('➡️', 'dab_createRoom', {
-      mode,
-      customRows,
-      customCols,
-      customPlayers,
-      playerName,
-    });
     socket.emit('dab_createRoom', {
       mode,
       customRows,
@@ -89,10 +81,6 @@ const DabGame = () => {
       customClass: { popup: sketchPopupClass },
     });
     if (joinRoomId) {
-      logger.socket('➡️', 'dab_joinRoom', {
-        roomId: joinRoomId.toUpperCase(),
-        playerName,
-      });
       socket.emit('dab_joinRoom', {
         roomId: joinRoomId.toUpperCase(),
         playerName,
@@ -107,17 +95,12 @@ const DabGame = () => {
     if (saved && !reconnectAttempted.current) {
       reconnectAttempted.current = true;
       const { roomId: savedRoomId, playerId } = JSON.parse(saved);
-      logger.socket('➡️', 'dab_reconnect', { roomId: savedRoomId, playerId });
       socket.emit('dab_reconnect', { roomId: savedRoomId, playerId });
       setRoomId(savedRoomId);
       return;
     }
 
     socket.on('dab_roomInfo', (room) => {
-      logger.socket('⬅️', 'dab_roomInfo', {
-        roomId: room.id,
-        gameState: room.gameState,
-      });
       setRoomId(room.id);
       setPlayers(room.players);
       setGameState(room.gameState);
@@ -138,8 +121,7 @@ const DabGame = () => {
       }
     });
 
-    socket.on('dab_gameStarted', ({ firstTurn }) => {
-      logger.socket('⬅️', 'dab_gameStarted', { firstTurn });
+    socket.on('dab_gameStarted', () => {
       setGameState('playing');
       setIsPaused(false);
       Swal.fire({
@@ -152,20 +134,19 @@ const DabGame = () => {
     });
 
     socket.on('dab_gameRestarted', () => {
-      logger.socket('⬅️', 'dab_gameRestarted', 'Game restarted');
       setGameState('waiting');
       setCurrentTurn(0);
-      setHorizontalLines((_rowsArray) =>
+      setHorizontalLines(
         Array(rows)
           .fill(null)
           .map(() => Array(cols).fill(null)),
       );
-      setVerticalLines((_rowsArray) =>
+      setVerticalLines(
         Array(rows)
           .fill(null)
           .map(() => Array(cols + 1).fill(null)),
       );
-      setBoxes((_rowsArray) =>
+      setBoxes(
         Array(rows)
           .fill(null)
           .map(() => Array(cols).fill(null)),
@@ -185,10 +166,6 @@ const DabGame = () => {
     socket.on(
       'dab_moveResult',
       ({ lineType, r, c, claimedBoxes, scores: newScores, currentTurn: newTurn, playerIndex: movePlayerIndex }) => {
-        logger.socket('⬅️', 'dab_moveResult', {
-          claimedBoxes,
-          scores: newScores,
-        });
         playLine();
 
         setHorizontalLines((prev) => {
@@ -219,22 +196,13 @@ const DabGame = () => {
     );
 
     socket.on('dab_gameOver', ({ winner, scores: finalScores, winners }) => {
-      logger.socket('⬅️', 'dab_gameOver', { winner, winners });
       setGameState('ended');
       setScores(finalScores);
       sessionStorage.removeItem('dab_reconnect');
 
       confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
 
-      if (winner) {
-        const winnerName = players.find((p) => p.id === winner)?.name || 'Player';
-        Swal.fire({
-          title: 'Victory!',
-          text: `${winnerName} wins!`,
-          icon: 'success',
-          customClass: { popup: sketchPopupClass },
-        });
-      } else {
+      if (!winner) {
         Swal.fire({
           title: "It's a Tie!",
           text: 'Multiple players share the top score!',
@@ -245,33 +213,27 @@ const DabGame = () => {
     });
 
     socket.on('dab_playerLeft', ({ playerId }) => {
-      logger.socket('⬅️', 'dab_playerLeft', { playerId });
       setPlayers((prev) => prev.map((p) => (p.id === playerId ? { ...p, connected: false } : p)));
     });
 
     socket.on('dab_playerReconnected', ({ playerId }) => {
-      logger.socket('⬅️', 'dab_playerReconnected', { playerId });
       setPlayers((prev) => prev.map((p) => (p.id === playerId ? { ...p, connected: true } : p)));
       setIsPaused(false);
     });
 
     socket.on('dab_gamePaused', () => {
-      logger.socket('⬅️', 'dab_gamePaused', 'Game paused');
       setIsPaused(true);
     });
 
     socket.on('dab_redoRequested', ({ requesterId }) => {
-      logger.socket('⬅️', 'dab_redoRequested', { requesterId });
       setRedoRequest(requesterId);
     });
 
     socket.on('dab_redoCancelled', () => {
-      logger.socket('⬅️', 'dab_redoCancelled', 'Redo cancelled');
       setRedoRequest(null);
     });
 
     socket.on('dab_moveUndone', ({ horizontalLines: h, verticalLines: v, boxes: b, scores: s, currentTurn: t }) => {
-      logger.socket('⬅️', 'dab_moveUndone', 'Move undone');
       setHorizontalLines(h);
       setVerticalLines(v);
       setBoxes(b);
@@ -296,7 +258,7 @@ const DabGame = () => {
     };
   }, [socket]);
 
-  const handleLineClick = (lineType, r, c, _event) => {
+  const handleLineClick = (lineType, r, c) => {
     if (gameState !== 'playing') return;
     if (isPaused) return;
     if (myPlayerIndex !== currentTurn) return;
@@ -304,7 +266,6 @@ const DabGame = () => {
     const arr = lineType === 'h' ? horizontalLines : verticalLines;
     if (arr[r]?.[c] !== null) return;
 
-    logger.socket('➡️', 'dab_makeMove', { roomId, lineType, r, c });
     socket.emit('dab_makeMove', { roomId, lineType, r, c });
     setLastMove({ lineType, r, c });
   };
@@ -319,7 +280,6 @@ const DabGame = () => {
       customClass: { popup: sketchPopupClass },
     }).then((result) => {
       if (result.isConfirmed) {
-        logger.socket('➡️', 'dab_leaveRoom', { roomId });
         socket.emit('dab_leaveRoom', roomId);
         clearRoomId();
         sessionStorage.removeItem('dab_reconnect');
@@ -329,25 +289,13 @@ const DabGame = () => {
   };
 
   const handleStartGame = () => {
-    if (mode === 'classic') {
-      logger.socket('➡️', 'dab_startGame', { roomId, rows: 9, cols: 9 });
-      socket.emit('dab_startGame', { roomId, rows: 9, cols: 9 });
-    } else {
-      logger.socket('➡️', 'dab_startGame', {
-        roomId,
-        rows: customRows,
-        cols: customCols,
-      });
-      socket.emit('dab_startGame', {
-        roomId,
-        rows: customRows,
-        cols: customCols,
-      });
-    }
+    const sizeMap = { classic: 9, extended: 14, marathon: 19 };
+    const gameRows = mode === 'custom' ? customRows : sizeMap[mode] || 9;
+    const gameCols = mode === 'custom' ? customCols : sizeMap[mode] || 9;
+    socket.emit('dab_startGame', { roomId, rows: gameRows, cols: gameCols });
   };
 
   const handleRestartGame = () => {
-    logger.socket('➡️', 'dab_restartGame', { roomId });
     socket.emit('dab_restartGame', roomId);
   };
 
@@ -361,10 +309,71 @@ const DabGame = () => {
 
   if (!roomId) {
     return (
-      <GameLayout socket={socket} roomId={null} gamePrefix="dab" players={[]}>
+      <div className="min-h-screen bg-paper flex flex-col items-center justify-center p-4">
+        <h1 className="text-3xl sm:text-5xl font-sketch mb-6 text-ink">Dots & Boxes</h1>
+        <SketchCard className="p-6 max-w-md w-full mb-4">
+          <AvatarSelector
+            avatar={avatar}
+            color={avatarColor}
+            onAvatarChange={setAvatar}
+            onColorChange={setAvatarColor}
+          />
+        </SketchCard>
         <SketchCard className="p-8 max-w-md w-full">
-          <h2 className="text-3xl font-sketch mb-4 text-center text-ink">Dots & Boxes</h2>
+          <h2 className="font-handwriting text-lg text-ink mb-4 text-center">Game Mode</h2>
           <div className="flex gap-3 mb-4">
+            <SketchButton
+              onClick={() => setMode('classic')}
+              className={mode === 'classic' ? 'flex-1 bg-ink text-white' : 'flex-1'}
+            >
+              Classic (9×9)
+            </SketchButton>
+            <SketchButton
+              onClick={() => setMode('extended')}
+              className={mode === 'extended' ? 'flex-1 bg-ink text-white' : 'flex-1'}
+            >
+              Extended (14×14)
+            </SketchButton>
+            <SketchButton
+              onClick={() => setMode('marathon')}
+              className={mode === 'marathon' ? 'flex-1 bg-ink text-white' : 'flex-1'}
+            >
+              Marathon (19×19)
+            </SketchButton>
+          </div>
+          <SketchButton
+            onClick={() => setMode('custom')}
+            className={`w-full mb-4 ${mode === 'custom' ? 'bg-ink text-white' : ''}`}
+          >
+            Custom Size
+          </SketchButton>
+          {mode === 'custom' && (
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="font-handwriting text-ink block mb-1">Rows: {customRows}</label>
+                <input
+                  type="range"
+                  min="3"
+                  max="30"
+                  value={customRows}
+                  onChange={(e) => setCustomRows(Number(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <label className="font-handwriting text-ink block mb-1">Columns: {customCols}</label>
+                <input
+                  type="range"
+                  min="3"
+                  max="30"
+                  value={customCols}
+                  onChange={(e) => setCustomCols(Number(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+            </div>
+          )}
+          <div className="flex gap-3">
             <SketchButton onClick={handleCreateRoom} className="flex-1">
               Create Room
             </SketchButton>
@@ -372,54 +381,8 @@ const DabGame = () => {
               Join Room
             </SketchButton>
           </div>
-          <SketchBorder>
-            <div className="flex items-center gap-2 mb-3">
-              <SwatchBook size={20} className="text-ink" />
-              <span className="font-handwriting text-lg text-ink">Game Mode</span>
-            </div>
-            <div className="flex gap-3 mb-4">
-              <SketchButton
-                onClick={() => setMode('classic')}
-                className={mode === 'classic' ? 'flex-1 bg-ink text-white' : 'flex-1'}
-              >
-                Classic (9×9)
-              </SketchButton>
-              <SketchButton
-                onClick={() => setMode('custom')}
-                className={mode === 'custom' ? 'flex-1 bg-ink text-white' : 'flex-1'}
-              >
-                Custom Size
-              </SketchButton>
-            </div>
-            {mode === 'custom' && (
-              <div className="space-y-3 pt-3 border-t-2 border-dashed border-ink/20">
-                <div>
-                  <label className="font-handwriting text-ink block mb-1">Rows: {customRows}</label>
-                  <input
-                    type="range"
-                    min="3"
-                    max="15"
-                    value={customRows}
-                    onChange={(e) => setCustomRows(Number(e.target.value))}
-                    className="w-full"
-                  />
-                </div>
-                <div>
-                  <label className="font-handwriting text-ink block mb-1">Columns: {customCols}</label>
-                  <input
-                    type="range"
-                    min="3"
-                    max="15"
-                    value={customCols}
-                    onChange={(e) => setCustomCols(Number(e.target.value))}
-                    className="w-full"
-                  />
-                </div>
-              </div>
-            )}
-          </SketchBorder>
         </SketchCard>
-      </GameLayout>
+      </div>
     );
   }
 
@@ -467,54 +430,6 @@ const DabGame = () => {
                     </div>
                   ))}
                 </div>
-              </div>
-
-              <div className="sketch-border mb-6">
-                <div className="flex items-center gap-2 mb-3">
-                  <SwatchBook size={20} className="text-ink" />
-                  <span className="font-handwriting text-lg text-ink">Game Mode</span>
-                </div>
-                <div className="flex gap-3 mb-4">
-                  <button
-                    onClick={() => setMode('classic')}
-                    className={`sketch-button flex-1 ${mode === 'classic' ? 'bg-ink text-white' : ''}`}
-                  >
-                    Classic (9×9)
-                  </button>
-                  <button
-                    onClick={() => setMode('custom')}
-                    className={`sketch-button flex-1 ${mode === 'custom' ? 'bg-ink text-white' : ''}`}
-                  >
-                    Custom Size
-                  </button>
-                </div>
-
-                {mode === 'custom' && (
-                  <div className="space-y-3 pt-3 border-t-2 border-dashed border-ink/20">
-                    <div>
-                      <label className="font-handwriting text-ink block mb-1">Rows: {customRows}</label>
-                      <input
-                        type="range"
-                        min="3"
-                        max="15"
-                        value={customRows}
-                        onChange={(e) => setCustomRows(Number(e.target.value))}
-                        className="w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="font-handwriting text-ink block mb-1">Columns: {customCols}</label>
-                      <input
-                        type="range"
-                        min="3"
-                        max="15"
-                        value={customCols}
-                        onChange={(e) => setCustomCols(Number(e.target.value))}
-                        className="w-full"
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
 
               <button
@@ -587,14 +502,7 @@ const DabGame = () => {
                       <div className="flex gap-2">
                         <button
                           onClick={() => {
-                            logger.socket('➡️', 'dab_respondRedo', {
-                              roomId,
-                              accept: true,
-                            });
-                            socket.emit('dab_respondRedo', {
-                              roomId,
-                              accept: true,
-                            });
+                            socket.emit('dab_respondRedo', { roomId, accept: true });
                           }}
                           className="sketch-button flex-1 bg-green-50 hover:bg-green-100"
                         >
@@ -602,14 +510,7 @@ const DabGame = () => {
                         </button>
                         <button
                           onClick={() => {
-                            logger.socket('➡️', 'dab_respondRedo', {
-                              roomId,
-                              accept: false,
-                            });
-                            socket.emit('dab_respondRedo', {
-                              roomId,
-                              accept: false,
-                            });
+                            socket.emit('dab_respondRedo', { roomId, accept: false });
                           }}
                           className="sketch-button flex-1 bg-red-50 hover:bg-red-100"
                         >
@@ -625,7 +526,7 @@ const DabGame = () => {
                     {myPlayerIndex === currentTurn ? (
                       <div className="text-center">
                         <div
-                          className="w-8 h-8 rounded-full mx-auto mb-2 border-2 sketch-dot"
+                          className="w-8 h-8 rounded-full mx-auto mb-2 border-2"
                           style={{
                             backgroundColor: PLAYER_COLORS[currentTurn],
                             borderColor: PLAYER_COLORS[currentTurn],
@@ -637,7 +538,7 @@ const DabGame = () => {
                     ) : (
                       <div className="text-center">
                         <div
-                          className="w-8 h-8 rounded-full mx-auto mb-2 border-2 sketch-dot"
+                          className="w-8 h-8 rounded-full mx-auto mb-2 border-2"
                           style={{
                             backgroundColor: PLAYER_COLORS[currentTurn],
                             borderColor: PLAYER_COLORS[currentTurn],
@@ -650,9 +551,6 @@ const DabGame = () => {
                         {lastMove && myPlayerIndex === (currentTurn + 1) % players.length && (
                           <button
                             onClick={() => {
-                              logger.socket('➡️', 'dab_requestRedo', {
-                                roomId,
-                              });
                               socket.emit('dab_requestRedo', roomId);
                             }}
                             className="sketch-button mt-2 text-sm"
@@ -667,7 +565,7 @@ const DabGame = () => {
 
                 {isPaused && (
                   <div className="sketch-card p-4 bg-yellow-50">
-                    <p className="font-handwriting text-center text-ink font-bold">⏸️ Game Paused</p>
+                    <p className="font-handwriting text-center text-ink font-bold">Game Paused</p>
                     <p className="font-handwriting text-sm text-center text-gray-600">
                       Waiting for players to reconnect
                     </p>
@@ -676,7 +574,10 @@ const DabGame = () => {
 
                 {gameState === 'ended' && (
                   <div className="sketch-card p-4 bg-green-50">
-                    <p className="font-sketch text-2xl text-center text-ink font-bold mb-3">🏆 Game Over!</p>
+                    <div className="flex justify-center mb-2">
+                      <Trophy size={32} className="text-yellow-500" />
+                    </div>
+                    <p className="font-sketch text-2xl text-center text-ink font-bold mb-3">Game Over!</p>
                     <button
                       onClick={handleRestartGame}
                       className="sketch-button w-full bg-green-100 hover:bg-green-200"
@@ -730,7 +631,6 @@ const DabGame = () => {
                                   borderRadius: '4px',
                                 }}
                               >
-                                {/* Paper texture overlay */}
                                 <defs>
                                   <filter id="paper-texture">
                                     <feTurbulence
@@ -745,7 +645,6 @@ const DabGame = () => {
                                   </filter>
                                 </defs>
 
-                                {/* Claimed boxes with sketchy fill */}
                                 {boxes.map((row, r) =>
                                   row.map((boxOwner, c) =>
                                     boxOwner !== null ? (
@@ -758,7 +657,6 @@ const DabGame = () => {
                                           fill={PLAYER_COLORS[boxOwner]}
                                           opacity={0.15}
                                         />
-                                        {/* Cross-hatch pattern */}
                                         <path
                                           d={`
                                           M ${c * spacing} ${r * spacing}
@@ -776,7 +674,6 @@ const DabGame = () => {
                                   ),
                                 )}
 
-                                {/* Horizontal lines with hand-drawn wobble */}
                                 {Array.from({ length: rows + 1 }, (_, r) =>
                                   Array.from({ length: cols }, (_, c) => {
                                     const owner = horizontalLines[r]?.[c];
@@ -812,7 +709,7 @@ const DabGame = () => {
                                           }}
                                           onPointerDown={(e) => {
                                             e.stopPropagation();
-                                            handleLineClick('h', r, c, e);
+                                            handleLineClick('h', r, c);
                                           }}
                                         />
                                       </g>
@@ -820,7 +717,6 @@ const DabGame = () => {
                                   }),
                                 )}
 
-                                {/* Vertical lines with hand-drawn wobble */}
                                 {Array.from({ length: rows }, (_, r) =>
                                   Array.from({ length: cols + 1 }, (_, c) => {
                                     const owner = verticalLines[r]?.[c];
@@ -856,7 +752,7 @@ const DabGame = () => {
                                           }}
                                           onPointerDown={(e) => {
                                             e.stopPropagation();
-                                            handleLineClick('v', r, c, e);
+                                            handleLineClick('v', r, c);
                                           }}
                                         />
                                       </g>
@@ -864,7 +760,6 @@ const DabGame = () => {
                                   }),
                                 )}
 
-                                {/* Hand-drawn dots (slightly irregular) */}
                                 {Array.from({ length: rows + 1 }, (_, r) =>
                                   Array.from({ length: cols + 1 }, (_, c) => {
                                     const seed = r * 1000 + c;

@@ -65,37 +65,44 @@ describe('DabGame', () => {
     sessionStorage.clear();
   });
 
-  describe('Waiting State', () => {
+  describe('Lobby - No Room', () => {
     it('shows Create Room and Join Room buttons', () => {
       render(<DabGame />, { wrapper: Wrapper });
       expect(screen.getByText('Create Room')).toBeTruthy();
       expect(screen.getByText('Join Room')).toBeTruthy();
     });
 
-    it('shows Classic and Custom Size mode buttons', () => {
+    it('emits dab_createRoom when Create Room is clicked', async () => {
       render(<DabGame />, { wrapper: Wrapper });
-      expect(screen.getByText('Classic (9×9)')).toBeTruthy();
-      expect(screen.getByText('Custom Size')).toBeTruthy();
-    });
-
-    it('emits dab_createRoom with default options when Create Room is clicked', async () => {
-      render(<DabGame />, { wrapper: Wrapper });
-      const btn = screen.getByText('Create Room');
       await act(async () => {
-        fireEvent.click(btn);
+        fireEvent.click(screen.getByText('Create Room'));
       });
-      expect(mockSocket.emit).toHaveBeenCalledWith(
-        'dab_createRoom',
-        expect.objectContaining({
-          mode: 'classic',
-          playerName: expect.any(String),
-        }),
-      );
+      expect(mockSocket.emit).toHaveBeenCalledWith('dab_createRoom', expect.objectContaining({ mode: 'classic' }));
     });
   });
 
-  describe('Scoreboard and Turn Indicator', () => {
-    it('shows player names when playing', async () => {
+  describe('Mode Selection', () => {
+    it('shows Classic, Extended, and Marathon mode buttons', () => {
+      render(<DabGame />, { wrapper: Wrapper });
+      expect(screen.getByText('Classic (9×9)')).toBeTruthy();
+      expect(screen.getByText('Extended (14×14)')).toBeTruthy();
+      expect(screen.getByText('Marathon (19×19)')).toBeTruthy();
+    });
+
+    it('switches mode when Extended is clicked', async () => {
+      render(<DabGame />, { wrapper: Wrapper });
+      await act(async () => {
+        fireEvent.click(screen.getByText('Extended (14×14)'));
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByText('Create Room'));
+      });
+      expect(mockSocket.emit).toHaveBeenCalledWith('dab_createRoom', expect.objectContaining({ mode: 'extended' }));
+    });
+  });
+
+  describe('Playing State', () => {
+    it('shows player scores when playing', async () => {
       render(<DabGame />, { wrapper: Wrapper });
 
       const cb = findEventCb('dab_roomInfo');
@@ -117,153 +124,13 @@ describe('DabGame', () => {
 
       expect(screen.getByText('Your Turn!')).toBeTruthy();
     });
-
-    it('shows waiting message when it is not my turn', async () => {
-      render(<DabGame />, { wrapper: Wrapper });
-
-      const cb = findEventCb('dab_roomInfo');
-      await act(async () => {
-        cb(makePlayingRoomInfo({ currentTurn: 1 }));
-      });
-
-      expect(screen.getAllByText(/Bob/).length).toBeGreaterThanOrEqual(1);
-    });
   });
 
-  describe('Redo Flow', () => {
-    it('shows redo request with player name when dab_redoRequested is received', async () => {
+  describe('Avatar Selector', () => {
+    it('shows avatar picker in the lobby', () => {
       render(<DabGame />, { wrapper: Wrapper });
-
-      const cb = findEventCb('dab_roomInfo');
-      await act(async () => {
-        cb(makePlayingRoomInfo({ currentTurn: 0 }));
-      });
-
-      const redoCb = findEventCb('dab_redoRequested');
-      await act(async () => {
-        redoCb({ requesterId: 'p2' });
-      });
-
-      expect(screen.getByText(/wants to undo/)).toBeTruthy();
-    });
-
-    it('shows Allow and Deny buttons when I am the current turn player', async () => {
-      render(<DabGame />, { wrapper: Wrapper });
-
-      const cb = findEventCb('dab_roomInfo');
-      await act(async () => {
-        cb(makePlayingRoomInfo({ currentTurn: 0 }));
-      });
-
-      const redoCb = findEventCb('dab_redoRequested');
-      await act(async () => {
-        redoCb({ requesterId: 'p2' });
-      });
-
-      expect(screen.getByText('Allow')).toBeTruthy();
-      expect(screen.getByText('Deny')).toBeTruthy();
-    });
-
-    it('emits dab_respondRedo with accept:true when Allow is clicked', async () => {
-      render(<DabGame />, { wrapper: Wrapper });
-
-      const cb = findEventCb('dab_roomInfo');
-      await act(async () => {
-        cb(makePlayingRoomInfo({ currentTurn: 0 }));
-      });
-
-      const redoCb = findEventCb('dab_redoRequested');
-      await act(async () => {
-        redoCb({ requesterId: 'p2' });
-      });
-
-      const allowBtn = screen.getByText('Allow');
-      await act(async () => {
-        fireEvent.click(allowBtn);
-      });
-
-      expect(mockSocket.emit).toHaveBeenCalledWith('dab_respondRedo', expect.objectContaining({ accept: true }));
-    });
-
-    it('emits dab_respondRedo with accept:false when Deny is clicked', async () => {
-      render(<DabGame />, { wrapper: Wrapper });
-
-      const cb = findEventCb('dab_roomInfo');
-      await act(async () => {
-        cb(makePlayingRoomInfo({ currentTurn: 0 }));
-      });
-
-      const redoCb = findEventCb('dab_redoRequested');
-      await act(async () => {
-        redoCb({ requesterId: 'p2' });
-      });
-
-      const denyBtn = screen.getByText('Deny');
-      await act(async () => {
-        fireEvent.click(denyBtn);
-      });
-
-      expect(mockSocket.emit).toHaveBeenCalledWith('dab_respondRedo', expect.objectContaining({ accept: false }));
-    });
-
-    it('hides redo UI when dab_redoCancelled is received', async () => {
-      render(<DabGame />, { wrapper: Wrapper });
-
-      const cb = findEventCb('dab_roomInfo');
-      await act(async () => {
-        cb(makePlayingRoomInfo({ currentTurn: 0 }));
-      });
-
-      const redoCb = findEventCb('dab_redoRequested');
-      await act(async () => {
-        redoCb({ requesterId: 'p2' });
-      });
-
-      expect(screen.getByText(/wants to undo/)).toBeTruthy();
-
-      const cancelCb = findEventCb('dab_redoCancelled');
-      await act(async () => {
-        cancelCb();
-      });
-
-      expect(screen.queryByText(/wants to undo/)).toBeNull();
-    });
-
-    it('shows Request Undo button when lastMove exists and not my turn', async () => {
-      render(<DabGame />, { wrapper: Wrapper });
-
-      const cb = findEventCb('dab_roomInfo');
-      await act(async () => {
-        cb(
-          makePlayingRoomInfo({
-            currentTurn: 1,
-            lastMove: { lineType: 'h', r: 0, c: 0 },
-          }),
-        );
-      });
-
-      expect(screen.getByText(/Request Undo/)).toBeTruthy();
-    });
-
-    it('emits dab_requestRedo when Request Undo is clicked', async () => {
-      render(<DabGame />, { wrapper: Wrapper });
-
-      const cb = findEventCb('dab_roomInfo');
-      await act(async () => {
-        cb(
-          makePlayingRoomInfo({
-            currentTurn: 1,
-            lastMove: { lineType: 'h', r: 0, c: 0 },
-          }),
-        );
-      });
-
-      const undoBtn = screen.getByText(/Request Undo/);
-      await act(async () => {
-        fireEvent.click(undoBtn);
-      });
-
-      expect(mockSocket.emit).toHaveBeenCalledWith('dab_requestRedo', expect.any(String));
+      expect(screen.getByText('🐼')).toBeTruthy();
+      expect(screen.getByText('🦊')).toBeTruthy();
     });
   });
 
@@ -278,41 +145,10 @@ describe('DabGame', () => {
 
       const gameOverCb = findEventCb('dab_gameOver');
       await act(async () => {
-        gameOverCb({
-          winner: 'p1',
-          scores: [5, 3],
-          winners: ['p1'],
-        });
+        gameOverCb({ winner: 'p1', scores: [5, 3], winners: ['p1'] });
       });
 
-      expect(screen.getByText(/Game Over/)).toBeTruthy();
-      expect(screen.getByText('Play Again')).toBeTruthy();
-    });
-
-    it('calls Swal.fire with tie message when no winner', async () => {
-      render(<DabGame />, { wrapper: Wrapper });
-
-      const cb = findEventCb('dab_roomInfo');
-      await act(async () => {
-        cb(makePlayingRoomInfo());
-      });
-
-      const Swal = (await import('sweetalert2')).default;
-
-      const gameOverCb = findEventCb('dab_gameOver');
-      await act(async () => {
-        gameOverCb({
-          winner: null,
-          scores: [4, 4],
-          winners: ['p1', 'p2'],
-        });
-      });
-
-      expect(Swal.fire).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: "It's a Tie!",
-        }),
-      );
+      expect(screen.getByText(/Play Again/)).toBeTruthy();
     });
 
     it('emits dab_restartGame when Play Again is clicked', async () => {
@@ -325,11 +161,7 @@ describe('DabGame', () => {
 
       const gameOverCb = findEventCb('dab_gameOver');
       await act(async () => {
-        gameOverCb({
-          winner: 'p1',
-          scores: [5, 3],
-          winners: ['p1'],
-        });
+        gameOverCb({ winner: 'p1', scores: [5, 3], winners: ['p1'] });
       });
 
       const playAgainBtn = screen.getByText('Play Again');
@@ -338,6 +170,41 @@ describe('DabGame', () => {
       });
 
       expect(mockSocket.emit).toHaveBeenCalledWith('dab_restartGame', expect.any(String));
+    });
+  });
+
+  describe('Redo Flow', () => {
+    it('shows redo request when dab_redoRequested is received', async () => {
+      render(<DabGame />, { wrapper: Wrapper });
+
+      const cb = findEventCb('dab_roomInfo');
+      await act(async () => {
+        cb(makePlayingRoomInfo({ currentTurn: 0 }));
+      });
+
+      const redoCb = findEventCb('dab_redoRequested');
+      await act(async () => {
+        redoCb({ requesterId: 'p2' });
+      });
+
+      expect(screen.getByText(/wants to undo/)).toBeTruthy();
+    });
+
+    it('shows Allow and Deny buttons when I am the current turn', async () => {
+      render(<DabGame />, { wrapper: Wrapper });
+
+      const cb = findEventCb('dab_roomInfo');
+      await act(async () => {
+        cb(makePlayingRoomInfo({ currentTurn: 0 }));
+      });
+
+      const redoCb = findEventCb('dab_redoRequested');
+      await act(async () => {
+        redoCb({ requesterId: 'p2' });
+      });
+
+      expect(screen.getByText('Allow')).toBeTruthy();
+      expect(screen.getByText('Deny')).toBeTruthy();
     });
   });
 

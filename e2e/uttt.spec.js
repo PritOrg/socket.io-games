@@ -1,5 +1,13 @@
 const { test, expect } = require('@playwright/test');
-const { setPlayerNames, createAndJoinRoom } = require('./helpers');
+const {
+  navigateToGame,
+  clickCreateRoom,
+  getRoomCode,
+  clickJoinRoom,
+  fillSwalInput,
+  confirmSwal,
+  dismissSwalIfPresent,
+} = require('./helpers');
 
 test.describe('UTTT E2E', () => {
   test('create room, join, play a few moves, verify board updates', async ({ browser }) => {
@@ -7,16 +15,26 @@ test.describe('UTTT E2E', () => {
     const page1 = await ctx.newPage();
     const page2 = await ctx.newPage();
 
+    await page1.addInitScript(() => localStorage.setItem('playerName', 'Alpha'));
+    await page2.addInitScript(() => localStorage.setItem('playerName', 'Beta'));
     await page1.goto('/');
     await page2.goto('/');
-    await setPlayerNames(page1, page2, 'Alpha', 'Beta');
 
-    const roomCode = await createAndJoinRoom(page1, page2, '/uttt', 'Join Room', 'Create Room');
+    // Manually create/join
+    await navigateToGame(page1, '/uttt');
+    await page1.waitForTimeout(2000);
+    await clickCreateRoom(page1, 'Create Room');
+    const roomCode = await getRoomCode(page1);
     expect(roomCode).toBeTruthy();
 
-    // Wait for room info
-    await page1.waitForTimeout(1000);
-    await page2.waitForTimeout(1000);
+    await navigateToGame(page2, '/uttt');
+    await page2.waitForTimeout(2000);
+    await clickJoinRoom(page2, 'Join Room');
+    await fillSwalInput(page2, roomCode);
+    await confirmSwal(page2);
+
+    await page1.waitForTimeout(1500);
+    await page2.waitForTimeout(1500);
 
     await expect(page1.locator('button[title="Click to copy room ID"]')).toHaveText(roomCode);
     await expect(page2.locator('button[title="Click to copy room ID"]')).toHaveText(roomCode);
@@ -67,17 +85,26 @@ test.describe('UTTT E2E', () => {
     const page1 = await ctx.newPage();
     const page2 = await ctx.newPage();
 
+    await page1.addInitScript(() => localStorage.setItem('playerName', 'A'));
+    await page2.addInitScript(() => localStorage.setItem('playerName', 'B'));
     await page1.goto('/');
     await page2.goto('/');
-    await setPlayerNames(page1, page2, 'A', 'B');
 
-    await createAndJoinRoom(page1, page2, '/uttt', 'Join Room', 'Create Room');
-    await page1.waitForTimeout(1000);
-    await page2.waitForTimeout(1000);
+    // Manually create/join
+    await navigateToGame(page1, '/uttt');
+    await page1.waitForTimeout(2000);
+    await clickCreateRoom(page1, 'Create Room');
+    const roomCode = await getRoomCode(page1);
+    expect(roomCode).toBeTruthy();
 
-    // Wait for game to start (check for "Your Turn" or "Waiting" text)
-    await page1.waitForTimeout(500);
-    await page2.waitForTimeout(500);
+    await navigateToGame(page2, '/uttt');
+    await page2.waitForTimeout(2000);
+    await clickJoinRoom(page2, 'Join Room');
+    await fillSwalInput(page2, roomCode);
+    await confirmSwal(page2);
+
+    await page1.waitForTimeout(1500);
+    await page2.waitForTimeout(1500);
 
     // P1 clicks grid 0, cell 0 — sends P2 to grid 0
     const macroGrid = page1.locator('.relative.grid.grid-cols-3').first();
@@ -89,7 +116,6 @@ test.describe('UTTT E2E', () => {
     // P2 should see the grid hint: "You must play in grid 1"
     // Wait for hint to appear after state update
     await page2.waitForTimeout(500);
-    // The hint is shown as a div with text containing "You must play in grid"
     const hintVisible = await page2
       .locator('div.font-handwriting')
       .filter({ hasText: /You must play in grid/ })

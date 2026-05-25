@@ -17,9 +17,10 @@ test.describe('Reconnect E2E', () => {
     const page1 = await ctx.newPage();
     const page2 = await ctx.newPage();
 
+    await page1.addInitScript(() => localStorage.setItem('playerName', 'Alpha'));
+    await page2.addInitScript(() => localStorage.setItem('playerName', 'Beta'));
     await page1.goto('/');
     await page2.goto('/');
-    await setPlayerNames(page1, page2, 'Alpha', 'Beta');
 
     // Manually create/join room to have better control
     await navigateToGame(page1, '/tictactoe');
@@ -30,7 +31,7 @@ test.describe('Reconnect E2E', () => {
 
     // Join from page2
     await navigateToGame(page2, '/tictactoe');
-    await page2.waitForTimeout(500);
+    await page2.waitForTimeout(1500);
     await clickJoinRoom(page2, 'Join');
     await fillSwalInput(page2, roomCode);
     await confirmSwal(page2);
@@ -61,9 +62,10 @@ test.describe('Reconnect E2E', () => {
     const page1 = await ctx.newPage();
     const page2 = await ctx.newPage();
 
+    await page1.addInitScript(() => localStorage.setItem('playerName', 'Xena'));
+    await page2.addInitScript(() => localStorage.setItem('playerName', 'Odin'));
     await page1.goto('/');
     await page2.goto('/');
-    await setPlayerNames(page1, page2, 'Xena', 'Odin');
 
     await createAndJoinRoom(page1, page2, '/tictactoe', 'Join', 'Create');
     await page1.waitForTimeout(800);
@@ -82,9 +84,9 @@ test.describe('Reconnect E2E', () => {
     await page1.waitForTimeout(2000);
     await page2.waitForTimeout(1500);
 
-    // Play Again button should appear
-    const playAgain1 = page1.locator('button:has-text("Play Again")');
-    const playAgain2 = page2.locator('button:has-text("Play Again")');
+    // Rematch button should appear (from MatchReport)
+    const playAgain1 = page1.locator('button:has-text("Rematch")');
+    const playAgain2 = page2.locator('button:has-text("Rematch")');
     await expect(playAgain1).toBeVisible({ timeout: 5000 });
     await expect(playAgain2).toBeVisible({ timeout: 5000 });
 

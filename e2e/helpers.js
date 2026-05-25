@@ -84,7 +84,7 @@ async function createAndJoinRoom(
   createBtnText = 'Create Room',
 ) {
   await navigateToGame(pageCreator, gamePath);
-  await pageCreator.waitForTimeout(500);
+  await pageCreator.waitForTimeout(2000);
 
   await clickCreateRoom(pageCreator, createBtnText);
   // Wait for room code to be populated (not just visible)
@@ -93,7 +93,7 @@ async function createAndJoinRoom(
   const roomCode = await getRoomCode(pageCreator);
 
   await navigateToGame(pageJoiner, gamePath);
-  await pageJoiner.waitForTimeout(500);
+  await pageJoiner.waitForTimeout(2000);
 
   await clickJoinRoom(pageJoiner, joinBtnText);
   await fillSwalInput(pageJoiner, roomCode);
