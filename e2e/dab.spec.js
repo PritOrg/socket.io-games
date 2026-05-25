@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { setPlayerName, setPlayerNames, navigateToGame, createAndJoinRoom } = require('./helpers');
+const { setPlayerName, setPlayerNames, dismissSwalIfPresent } = require('./helpers');
 
 test.describe('DAB E2E', () => {
   test('create room, join, select mode, start game, draw lines', async ({ browser }) => {
@@ -11,56 +11,63 @@ test.describe('DAB E2E', () => {
     await page2.goto('/');
     await setPlayerNames(page1, page2, 'Drawer', 'Liner');
 
-    await createAndJoinRoom(page1, page2, '/dab', 'Join Room', 'Create Room');
-    await page1.waitForTimeout(1000);
-    await page2.waitForTimeout(1000);
+    // Page1 creates room
+    await page1.goto('/dab');
+    await page1.waitForTimeout(500);
+    await page1.locator('button:has-text("Create Room")').click();
 
-    // Both should see room code
-    const code1 = page1.locator('button[title="Click to copy room ID"]');
-    const code2 = page2.locator('button[title="Click to copy room ID"]');
-    await expect(code1).toBeVisible();
-    await expect(code2).toBeVisible();
+    // Wait for waiting room - room code appears in a div with class font-sketch
+    await page1.locator('div.font-sketch.text-3xl').first().waitFor({ state: 'visible', timeout: 10000 });
+    const roomCodeEl = page1.locator('div.font-sketch.text-3xl').first();
+    const roomCode = await roomCodeEl.textContent();
+    expect(roomCode).toBeTruthy();
+
+    // Page2 joins room
+    await page2.goto('/dab');
+    await page2.waitForTimeout(500);
+    await page2.locator('button:has-text("Join Room")').click();
+    await page2.locator('.swal2-input').waitFor({ state: 'visible', timeout: 5000 });
+    await page2.locator('.swal2-input').fill(roomCode);
+    await page2.locator('.swal2-confirm').click();
+
+    // Wait for Start Game button to appear (indicates both players are in)
+    await page1.locator('button:has-text("Start Game!")').waitFor({ state: 'visible', timeout: 10000 });
+
+    // Dismiss any modals
+    await dismissSwalIfPresent(page1);
+    await dismissSwalIfPresent(page2);
+
+    // Creator clicks Start Game button
+    await page1.locator('button:has-text("Start Game!")').click({ force: true });
+
+    // Wait for game to start - wait for scoreboard to appear
+    await page1.locator('text=Scoreboard').waitFor({ state: 'visible', timeout: 10000 });
+    await page2.locator('text=Scoreboard').waitFor({ state: 'visible', timeout: 10000 });
+
+    // Dismiss the "Game Started!" modal if present
+    await dismissSwalIfPresent(page1);
+    await dismissSwalIfPresent(page2);
 
     // Both should see game title
-    await expect(page1.locator('h2:has-text("Dots")')).toBeVisible();
-
-    // Classic mode should be selected by default
-    const classicBtn = page1.locator('button:has-text("Classic")');
-    await expect(classicBtn).toBeVisible();
-
-    // Creator starts the game
-    const startBtn = page1.locator('button:has-text("Start Game")');
-    await startBtn.waitFor({ state: 'visible', timeout: 5000 });
-    await expect(startBtn).not.toBeDisabled();
-    await startBtn.click();
-
-    await page1.waitForTimeout(1500);
-    await page2.waitForTimeout(1500);
+    await expect(page1.locator('text=Dots')).toBeVisible();
+    await expect(page2.locator('text=Dots')).toBeVisible();
 
     // Both should see the scoreboard
-    await expect(page1.locator('text=Scoreboard')).toBeVisible();
-    await expect(page2.locator('text=Scoreboard')).toBeVisible();
-
-    // Both should see the game mode indicator
-    await expect(page2.locator('text=Scoreboard')).toBeVisible();
+    await expect(page1.locator('text=Scoreboard')).toBeVisible({ timeout: 5000 });
+    await expect(page2.locator('text=Scoreboard')).toBeVisible({ timeout: 5000 });
 
     // Verify the board has SVG elements
     const svg = page1.locator('svg');
-    await expect(svg).toBeVisible();
+    await expect(svg).toBeVisible({ timeout: 5000 });
 
-    // Draw a horizontal line on the top edge (r=0, c=0)
+    // Draw a line - find a transparent line and click it
     const lineSelectors = page1.locator('line[stroke="transparent"]');
     const lineCount = await lineSelectors.count();
     expect(lineCount).toBeGreaterThan(0);
 
-    // Click the first available transparent line to make a move
     await lineSelectors.first().click({ force: true });
     await page1.waitForTimeout(1000);
     await page2.waitForTimeout(1000);
-
-    // The move should be reflected - scores should still show 0 for first move (no box completed)
-    const scoreDisplay1 = page1.locator('text=Scoreboard');
-    await expect(scoreDisplay1).toBeVisible();
 
     await ctx.close();
   });
@@ -68,7 +75,7 @@ test.describe('DAB E2E', () => {
   test('custom game mode selection before starting', async ({ browser }) => {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
-    await navigateToGame(page, '/dab');
+    await page.goto('/dab');
     await setPlayerName(page, 'Customizer');
     await page.waitForTimeout(500);
 

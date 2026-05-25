@@ -53,8 +53,13 @@ export const GameProvider = ({ children }) => {
     }
   }, [playerName]);
 
+  const roomIdRef = useRef(roomId);
+  useEffect(() => {
+    roomIdRef.current = roomId;
+  }, [roomId]);
+
   const clearRoomId = (id) => {
-    if (roomId === id) {
+    if (roomIdRef.current === id) {
       setRoomId(null);
     }
   };

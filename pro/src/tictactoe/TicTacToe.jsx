@@ -315,7 +315,7 @@ const TicTacToe = () => {
               </SketchButton>
             )}
 
-            {(gameState === 'ready' || gameState === 'playing') && (
+            {(gameState === 'waiting' || gameState === 'playing') && (
               <SketchButton onClick={handleLeaveRoom} className="mt-2 text-xs sm:text-sm px-3 py-1">
                 Leave Room
               </SketchButton>

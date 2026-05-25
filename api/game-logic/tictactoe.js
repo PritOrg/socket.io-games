@@ -53,6 +53,7 @@ class TicTacToeManager extends BaseManager {
       forfeitTimer: null,
     };
     this.rooms.set(roomId, room);
+    this._trackSocket(socket.id, roomId);
     this.sendRoomInfo(roomId);
   }
 
@@ -70,6 +71,7 @@ class TicTacToeManager extends BaseManager {
 
     socket.join(room.id);
     room.players.push({ id: socket.id, name: playerName, connected: true });
+    this._trackSocket(socket.id, room.id);
     room.gameState = 'playing';
     room.currentTurn = room.players[0].id;
 
@@ -127,9 +129,9 @@ class TicTacToeManager extends BaseManager {
     const playerIndex = room.players.findIndex((p) => p.id === socket.id);
     if (playerIndex === -1) return;
 
-    room.players[playerIndex].connected = false;
-
     if (room.gameState === 'playing') {
+      room.players[playerIndex].connected = false;
+
       const activeCount = room.players.filter((p) => p.connected).length;
 
       if (activeCount === 0) {
@@ -142,10 +144,17 @@ class TicTacToeManager extends BaseManager {
           reason: 'Opponent disconnected',
         });
       }
-
-      this.io.to(room.id).emit(`${this.gamePrefix}_playerLeft`, { playerId: socket.id });
-      this.sendRoomInfo(room.id);
+    } else {
+      room.players.splice(playerIndex, 1);
+      if (room.players.length === 0) {
+        this.rooms.delete(roomIdSanitized);
+        return;
+      }
     }
+
+    this._untrackSocket(socket.id, room.id);
+    this.io.to(room.id).emit(`${this.gamePrefix}_playerLeft`, { playerId: socket.id });
+    this.sendRoomInfo(room.id);
   }
 
   reconnect(socket, { roomId, playerId }) {
@@ -165,6 +174,7 @@ class TicTacToeManager extends BaseManager {
     socket.join(room.id);
     player.id = socket.id;
     player.connected = true;
+    this._trackSocket(socket.id, room.id);
 
     this.clearTimer(`empty_${roomIdSanitized}`);
 
@@ -185,7 +195,11 @@ class TicTacToeManager extends BaseManager {
   }
 
   handleDisconnect(socket) {
-    for (const [roomId, room] of this.rooms.entries()) {
+    const roomIds = this.socketRooms.get(socket.id);
+    if (!roomIds) return;
+    for (const roomId of [...roomIds]) {
+      const room = this.rooms.get(roomId);
+      if (!room) continue;
       const playerIndex = room.players.findIndex((p) => p.id === socket.id);
       if (playerIndex === -1) continue;
 
@@ -209,6 +223,7 @@ class TicTacToeManager extends BaseManager {
         this.sendRoomInfo(room.id);
       }
     }
+    this.socketRooms.delete(socket.id);
   }
 
   sendRoomInfo(roomId) {

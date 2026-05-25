@@ -25,8 +25,22 @@ async function clickCreateRoom(page, buttonText = 'Create Room') {
 }
 
 async function getRoomCode(page) {
-  await page.locator('button[title="Click to copy room ID"]').waitFor({ state: 'visible', timeout: 10000 });
-  const text = await page.locator('button[title="Click to copy room ID"]').textContent();
+  const roomBtn = page.locator('button[title="Click to copy room ID"]');
+  await roomBtn.waitFor({ state: 'visible', timeout: 10000 });
+  // Wait for text content to be non-empty (with shorter timeout)
+  try {
+    await page.waitForFunction(
+      () => {
+        const btn = document.querySelector('button[title="Click to copy room ID"]');
+        return btn && btn.textContent && btn.textContent.trim().length > 0;
+      },
+      { timeout: 5000 },
+    );
+  } catch {
+    // Fallback: wait a bit more and try anyway
+    await page.waitForTimeout(1000);
+  }
+  const text = await roomBtn.textContent();
   return text.trim();
 }
 
@@ -72,6 +86,9 @@ async function createAndJoinRoom(
   await pageCreator.waitForTimeout(500);
 
   await clickCreateRoom(pageCreator, createBtnText);
+  // Wait for room code to be populated (not just visible)
+  // DAB game needs extra time since it renders room info after socket callback
+  await pageCreator.waitForTimeout(1000);
   const roomCode = await getRoomCode(pageCreator);
 
   await navigateToGame(pageJoiner, gamePath);
@@ -81,8 +98,13 @@ async function createAndJoinRoom(
   await fillSwalInput(pageJoiner, roomCode);
   await confirmSwal(pageJoiner);
 
-  await pageCreator.waitForTimeout(500);
-  await pageJoiner.waitForTimeout(500);
+  // Wait for both players to receive room info and dismiss any modals
+  await pageCreator.waitForTimeout(800);
+  await pageJoiner.waitForTimeout(800);
+
+  // Dismiss any modal on creator's side
+  await dismissSwalIfPresent(pageCreator);
+  await dismissSwalIfPresent(pageJoiner);
 
   return roomCode;
 }

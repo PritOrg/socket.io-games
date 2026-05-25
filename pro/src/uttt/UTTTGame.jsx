@@ -221,7 +221,6 @@ const UTTTGame = () => {
 
     return () => {
       socket.off('uttt_roomInfo');
-      socket.off('uttt_gameState');
       socket.off('uttt_gameStarted');
       socket.off('uttt_gameOver');
       socket.off('uttt_error');

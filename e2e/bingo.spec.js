@@ -7,6 +7,7 @@ const {
   clickJoinRoom,
   fillSwalInput,
   confirmSwal,
+  dismissSwalIfPresent,
 } = require('./helpers');
 
 test.describe('Bingo E2E', () => {
@@ -40,14 +41,20 @@ test.describe('Bingo E2E', () => {
     await expect(page1.locator('button[title="Click to copy room ID"]')).toHaveText(roomCode);
     await expect(page2.locator('button[title="Click to copy room ID"]')).toHaveText(roomCode);
 
-    // Verify room code text in game display
-    await expect(page1.locator('text=BINGO')).toBeVisible();
-    await expect(page2.locator('text=BINGO')).toBeVisible();
+    // Verify game title (h1 contains "Bingo")
+    await expect(page1.locator('h1:has-text("Bingo")')).toBeVisible();
+    await expect(page2.locator('h1:has-text("Bingo")')).toBeVisible();
 
     // Creator starts the game
-    await page1.locator('button:has-text("Start Party")').click();
+    // First dismiss any open modal
+    await dismissSwalIfPresent(page1);
+    await dismissSwalIfPresent(page2);
+    // Wait for modal to fully disappear
     await page1.waitForTimeout(1500);
     await page2.waitForTimeout(1500);
+    await page1.locator('button:has-text("Start Party")').click({ force: true });
+    await page1.waitForTimeout(2000);
+    await page2.waitForTimeout(2000);
 
     // Both should see the game board (5x5 grid)
     const board1 = page1.locator('.grid.grid-cols-5');

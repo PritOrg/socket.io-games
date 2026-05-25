@@ -29,7 +29,7 @@ class BingoManager extends BaseManager {
     const room = {
       id: roomId,
       creator: socket.id,
-      players: [{ id: socket.id, name: creatorName }],
+      players: [{ id: socket.id, name: creatorName, connected: true }],
       currentTurn: null,
       turnOrder: [socket.id],
       gameState: 'waiting',
@@ -38,6 +38,7 @@ class BingoManager extends BaseManager {
       playerBoards: {},
     };
     this.rooms.set(roomId, room);
+    this._trackSocket(socket.id, roomId);
     this.sendRoomInfo(roomId);
     socket.emit(`${this.gamePrefix}_alert`, {
       icon: 'success',
@@ -75,8 +76,9 @@ class BingoManager extends BaseManager {
     }
 
     socket.join(room.id);
-    room.players.push({ id: socket.id, name: playerName });
+    room.players.push({ id: socket.id, name: playerName, connected: true });
     room.turnOrder.push(socket.id);
+    this._trackSocket(socket.id, room.id);
 
     if (room.players.length >= 2 && room.gameState === 'waiting') {
       room.gameState = 'ready';
@@ -124,11 +126,12 @@ class BingoManager extends BaseManager {
     const sanitizedRoomId = this.sanitizeRoomId(roomId);
     const room = this.rooms.get(sanitizedRoomId);
     if (!room || room.creator !== socket.id) return;
-    room.gameState = 'ready';
-    room.currentTurn = room.players[0].id;
+
     room.strikedNumbers = [];
     room.markedNumbers = {};
     room.playerBoards = {};
+    room.gameState = 'ready';
+    room.currentTurn = room.players[0].id;
     this.io.to(sanitizedRoomId).emit(`${this.gamePrefix}_gameRestarted`);
     this.sendRoomInfo(sanitizedRoomId);
   }
@@ -168,6 +171,9 @@ class BingoManager extends BaseManager {
     const nextIndex = (currentIndex + 1) % room.turnOrder.length;
     room.currentTurn = room.turnOrder[nextIndex];
 
+    // Clear existing turn timer before emitting to prevent stale timer callback
+    this.clearTimer(`turn_${roomIdSanitized}`);
+
     const timestamp = Date.now();
 
     this.io.to(roomIdSanitized).emit(`${this.gamePrefix}_numberMarked`, {
@@ -179,9 +185,6 @@ class BingoManager extends BaseManager {
       nextPlayerId: room.currentTurn,
       timestamp,
     });
-
-    // Clear existing turn timer and set new one
-    this.clearTimer(`turn_${roomIdSanitized}`);
 
     const timer = setTimeout(() => {
       const currentRoom = this.rooms.get(roomIdSanitized);
@@ -253,9 +256,9 @@ class BingoManager extends BaseManager {
     const playerIndex = room.players.findIndex((p) => p.id === socket.id);
     if (playerIndex === -1) return;
 
-    room.players[playerIndex].connected = false;
-
     if (room.gameState === 'playing') {
+      room.players[playerIndex].connected = false;
+
       const activeCount = room.players.filter((p) => p.connected).length;
 
       if (activeCount === 0) {
@@ -266,10 +269,21 @@ class BingoManager extends BaseManager {
         room.gameState = 'paused';
         this.io.to(room.id).emit('bingo_gamePaused', { reason: 'Opponent disconnected' });
       }
-
-      this.io.to(room.id).emit('bingo_playerLeft', { playerId: socket.id });
-      this.sendRoomInfo(room.id);
+    } else {
+      room.players.splice(playerIndex, 1);
+      room.turnOrder = room.turnOrder.filter((id) => id !== socket.id);
+      if (room.players.length === 0) {
+        this.rooms.delete(roomId);
+        return;
+      }
+      if (room.creator === socket.id) {
+        room.creator = room.players[0].id;
+      }
     }
+
+    this._untrackSocket(socket.id, room.id);
+    this.io.to(room.id).emit('bingo_playerLeft', { playerId: socket.id });
+    this.sendRoomInfo(room.id);
   }
 
   reconnect(socket, { roomId, playerId }) {
@@ -296,6 +310,7 @@ class BingoManager extends BaseManager {
     socket.join(room.id);
     player.id = socket.id;
     player.connected = true;
+    this._trackSocket(socket.id, room.id);
 
     // Clear empty timer on reconnect
     this.clearTimer(`empty_${roomIdSanitized}`);
@@ -325,10 +340,13 @@ class BingoManager extends BaseManager {
   }
 
   handleDisconnect(socket) {
-    for (const [roomId, room] of this.rooms.entries()) {
+    const roomIds = this.socketRooms.get(socket.id);
+    if (!roomIds) return;
+    for (const roomId of [...roomIds]) {
+      const room = this.rooms.get(roomId);
+      if (!room) continue;
       const index = room.players.findIndex((p) => p.id === socket.id);
       if (index !== -1) {
-        // Use shared player leave handling
         this.handlePlayerLeave(socket, roomId, {
           onPlayerLeft: (_r, _s, _p) => {
             room.players.splice(index, 1);
@@ -345,6 +363,7 @@ class BingoManager extends BaseManager {
         });
       }
     }
+    this.socketRooms.delete(socket.id);
   }
 
   sendRoomInfo(roomId) {

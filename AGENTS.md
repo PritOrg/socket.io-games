@@ -92,3 +92,76 @@ On push to `main`/`fix/*`/`feat/*` and PRs to `main`:
 - Components: `PascalCase`, default-exported; hooks: `useX` prefix.
 - Socket listeners cleaned up in `useEffect` return. Destructure context via `useGameContext()`.
 - Dev server port: `VITE_PORT` env var or 5173. Backend port: `VITE_PORT` env var or 4000 (configured in `GameContext.jsx`).
+
+## Code Style Guidelines
+
+### Import Order
+
+**Frontend (pro/):** React → external → internal (relative)
+
+```js
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { io } from 'socket.io-client';
+import { useGameContext } from '../context/GameContext';
+import './Component.css';
+```
+
+**Server (api/):** Node built-ins → external → local (alphabetical within groups)
+
+```js
+const express = require('express');
+const socketIo = require('socket.io');
+const logger = require('./utils/logger');
+const BingoManager = require('./game-logic/bingo');
+```
+
+### Naming Conventions
+
+- **Components:** PascalCase, default export (`Bingo.jsx`, `GameBoard.jsx`)
+- **Hooks:** `useX` prefix (`useGameContext`, `useSocketListener`)
+- **Files:** kebab-case for utilities, PascalCase for components
+- **Socket events:** `<game>_` prefix (e.g., `bingo_join`, `ttt_move`, `uttt_alert`)
+- **Variables:** camelCase (`roomId`, `playerName`, `hasWon`)
+
+### Formatting
+
+- Prettier: 120 print width, 2 spaces, single quotes, trailing commas (required)
+- Semicolons required
+- No console.log in production code (allowed in tests)
+
+### Error Handling
+
+- Server: Early-return on invalid input, no thrown errors. Alert clients via `<game>_alert` event
+- Frontend: Destructure context via `useGameContext()`; socket listeners cleaned up in `useEffect` return
+
+### State Management
+
+- Server rooms: `Map` stored in `this.rooms` on manager instances
+- Timers: Stored in `this.timers = new Set()` with `registerEmptyTimer`/`clearTimer` helpers
+
+### Testing
+
+- API: Mocha + Chai + socket.io-client. Use `--grep` for single describe blocks
+- Frontend: Vitest + React Testing Library. Use `--testNamePattern` for single tests
+
+### Project Structure
+
+```
+api/
+├── index.js              # Server entrypoint
+├── game-logic/
+│   ├── BaseManager.js    # Base class for all game managers
+│   ├── bingo.js          # Bingo game logic
+│   ├── tictactoe.js      # TicTacToe game logic
+│   ├── uttt.js           # Ultimate TicTacToe game logic
+│   └── dab.js            # Dab game logic
+└── utils/logger.js       # Logging utility
+pro/
+├── src/
+│   ├── context/GameContext.jsx
+│   ├── components/
+│   ├── bingo/, tictactoe/, uttt/, dab/
+│   └── index.jsx
+└── vite.config.js
+```

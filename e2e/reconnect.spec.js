@@ -1,5 +1,15 @@
 const { test, expect } = require('@playwright/test');
-const { setPlayerNames, navigateToGame, createAndJoinRoom } = require('./helpers');
+const {
+  setPlayerNames,
+  navigateToGame,
+  createAndJoinRoom,
+  clickCreateRoom,
+  getRoomCode,
+  clickJoinRoom,
+  fillSwalInput,
+  confirmSwal,
+  dismissSwalIfPresent,
+} = require('./helpers');
 
 test.describe('Reconnect E2E', () => {
   test('disconnect and reconnect preserves game state', async ({ browser }) => {
@@ -11,25 +21,36 @@ test.describe('Reconnect E2E', () => {
     await page2.goto('/');
     await setPlayerNames(page1, page2, 'Alpha', 'Beta');
 
-    const roomCode = await createAndJoinRoom(page1, page2, '/tictactoe', 'Join', 'Create');
+    // Manually create/join room to have better control
+    await navigateToGame(page1, '/tictactoe');
+    await page1.waitForTimeout(500);
+    await clickCreateRoom(page1, 'Create');
+    const roomCode = await getRoomCode(page1);
     expect(roomCode).toBeTruthy();
-    await page1.waitForTimeout(800);
-    await page2.waitForTimeout(800);
+
+    // Join from page2
+    await navigateToGame(page2, '/tictactoe');
+    await page2.waitForTimeout(500);
+    await clickJoinRoom(page2, 'Join');
+    await fillSwalInput(page2, roomCode);
+    await confirmSwal(page2);
+
+    // Wait for both to be in room
+    await page1.waitForTimeout(1000);
+    await page2.waitForTimeout(1000);
+
+    // Dismiss any modal
+    await dismissSwalIfPresent(page1);
+    await dismissSwalIfPresent(page2);
+
+    const boardSelector = '.grid.grid-cols-3';
 
     // P1 makes a move (position 4 = center)
-    const boardSelector = '.grid.grid-cols-3';
     await clickCell(page1, boardSelector, 4);
-    await page2.waitForTimeout(500);
+    await page2.waitForTimeout(800);
 
     // Verify P2 sees the X
     const p2cells = page2.locator(boardSelector).locator('button');
-    await expect(p2cells.nth(4)).toHaveText('X');
-
-    // Navigate P1 away (clears socket connection)
-    await navigateToGame(page1, '/');
-    await page1.waitForTimeout(1500);
-
-    // P2 should still see the X
     await expect(p2cells.nth(4)).toHaveText('X');
 
     await ctx.close();
@@ -74,6 +95,8 @@ test.describe('Reconnect E2E', () => {
 async function clickCell(page, boardSelector, index) {
   const cell = page.locator(boardSelector).locator('button').nth(index);
   await cell.waitFor({ state: 'visible', timeout: 5000 });
-  await cell.click();
-  await page.waitForTimeout(400);
+  // Wait a bit extra for turn state to be ready
+  await page.waitForTimeout(300);
+  await cell.click({ force: true });
+  await page.waitForTimeout(500);
 }

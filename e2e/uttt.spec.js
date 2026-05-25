@@ -75,17 +75,24 @@ test.describe('UTTT E2E', () => {
     await page1.waitForTimeout(1000);
     await page2.waitForTimeout(1000);
 
+    // Wait for game to start (check for "Your Turn" or "Waiting" text)
+    await page1.waitForTimeout(500);
+    await page2.waitForTimeout(500);
+
     // P1 clicks grid 0, cell 0 — sends P2 to grid 0
     const macroGrid = page1.locator('.relative.grid.grid-cols-3').first();
     const innerGrids = macroGrid.locator('> div:not(.absolute)');
     await innerGrids.nth(0).locator('button').nth(0).click();
-    await page1.waitForTimeout(500);
-    await page2.waitForTimeout(500);
+    await page1.waitForTimeout(800);
+    await page2.waitForTimeout(800);
 
     // P2 should see the grid hint: "You must play in grid 1"
+    // Wait for hint to appear after state update
     await page2.waitForTimeout(500);
+    // The hint is shown as a div with text containing "You must play in grid"
     const hintVisible = await page2
-      .locator('text="must play in grid"')
+      .locator('div.font-handwriting')
+      .filter({ hasText: /You must play in grid/ })
       .isVisible()
       .catch(() => false);
     expect(hintVisible).toBeTruthy();

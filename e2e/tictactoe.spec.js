@@ -88,6 +88,10 @@ test.describe('TicTacToe E2E', () => {
 async function clickBoardCell(page, boardSelector, index) {
   const grid = page.locator(boardSelector);
   const cells = grid.locator('button');
-  await cells.nth(index).click();
-  await page.waitForTimeout(300);
+  // Wait for cell to be enabled (it's the player's turn)
+  await cells.nth(index).waitFor({ state: 'visible', timeout: 5000 });
+  // Wait a bit for any modal to close and turn to be ready
+  await page.waitForTimeout(200);
+  await cells.nth(index).click({ force: true });
+  await page.waitForTimeout(400);
 }

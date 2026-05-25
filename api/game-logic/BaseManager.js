@@ -3,6 +3,22 @@ class BaseManager {
     this.io = io;
     this.rooms = new Map();
     this.timers = new Map();
+    this.socketRooms = new Map();
+  }
+
+  _trackSocket(socketId, roomId) {
+    if (!this.socketRooms.has(socketId)) {
+      this.socketRooms.set(socketId, new Set());
+    }
+    this.socketRooms.get(socketId).add(roomId);
+  }
+
+  _untrackSocket(socketId, roomId) {
+    const rooms = this.socketRooms.get(socketId);
+    if (rooms) {
+      rooms.delete(roomId);
+      if (rooms.size === 0) this.socketRooms.delete(socketId);
+    }
   }
 
   sanitizeRoomId(roomId) {
@@ -36,7 +52,6 @@ class BaseManager {
       setTimeout(
         () => {
           callback();
-          this.rooms.delete(roomId);
         },
         5 * 60 * 1000,
       ),

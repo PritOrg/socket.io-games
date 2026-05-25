@@ -137,11 +137,11 @@ const PaperPartyLanding = () => {
         },
         buttonsStyling: false,
         inputValidator: (value) => {
-          if (!value) return 'We need a name to start the party!';
+          if (!value || !value.trim()) return 'We need a name to start the party!';
         },
       }).then((result) => {
         if (result.isConfirmed) {
-          setPlayerName(result.value);
+          setPlayerName(result.value.trim());
         }
       });
     }

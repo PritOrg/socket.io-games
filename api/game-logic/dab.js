@@ -79,6 +79,7 @@ class DabManager extends BaseManager {
     };
 
     this.rooms.set(roomId, room);
+    this._trackSocket(socket.id, roomId);
     this.sendRoomInfo(roomId);
   }
 
@@ -104,12 +105,7 @@ class DabManager extends BaseManager {
 
     socket.join(room.id);
     room.players.push({ id: socket.id, name: playerName, connected: true });
-
-    if (room.players.length >= room.maxPlayers) {
-      room.gameState = 'playing';
-      room.currentTurn = 0;
-      this.io.to(room.id).emit(`${this.gamePrefix}_gameStarted`, { firstTurn: room.players[0].id });
-    }
+    this._trackSocket(socket.id, room.id);
 
     this.sendRoomInfo(room.id);
   }
@@ -122,9 +118,9 @@ class DabManager extends BaseManager {
     const playerIndex = room.players.findIndex((p) => p.id === socket.id);
     if (playerIndex === -1) return;
 
-    room.players[playerIndex].connected = false;
-
     if (room.gameState === 'playing') {
+      room.players[playerIndex].connected = false;
+
       const activeCount = room.players.filter((p) => p.connected).length;
 
       if (activeCount === 0) {
@@ -138,10 +134,20 @@ class DabManager extends BaseManager {
           this.io.to(room.id).emit(`${this.gamePrefix}_gamePaused`, { reason: 'Opponent disconnected' });
         }
       }
-
-      this.io.to(room.id).emit(`${this.gamePrefix}_playerLeft`, { playerId: socket.id });
-      this.sendRoomInfo(room.id);
+    } else {
+      room.players.splice(playerIndex, 1);
+      if (room.players.length === 0) {
+        this.rooms.delete(sanitizedRoomId);
+        return;
+      }
+      if (room.creator === socket.id) {
+        room.creator = room.players[0].id;
+      }
     }
+
+    this._untrackSocket(socket.id, room.id);
+    this.io.to(room.id).emit(`${this.gamePrefix}_playerLeft`, { playerId: socket.id });
+    this.sendRoomInfo(room.id);
   }
 
   restartGame(socket, roomId) {
@@ -161,7 +167,7 @@ class DabManager extends BaseManager {
     room.boxes = Array(room.rows)
       .fill(null)
       .map(() => Array(room.cols).fill(null));
-    room.scores = Array(room.players.length).fill(0);
+    room.scores = Array(room.maxPlayers).fill(0);
     room.lastMove = null;
     room.redoRequest = null;
     room.gameState = 'waiting';
@@ -177,6 +183,7 @@ class DabManager extends BaseManager {
 
     room.gameState = 'playing';
     room.currentTurn = 0;
+    room.startedWithPlayers = room.players.length;
     this.io.to(sanitizedRoomId).emit(`${this.gamePrefix}_gameStarted`, { firstTurn: room.players[0].id });
     this.sendRoomInfo(sanitizedRoomId);
   }
@@ -310,6 +317,7 @@ class DabManager extends BaseManager {
     socket.join(room.id);
     player.id = socket.id;
     player.connected = true;
+    this._trackSocket(socket.id, room.id);
 
     this.clearTimer(`empty_${sanitizedRoomId}`);
 
@@ -470,7 +478,11 @@ class DabManager extends BaseManager {
   }
 
   handleDisconnect(socket) {
-    for (const [roomId, room] of this.rooms.entries()) {
+    const roomIds = this.socketRooms.get(socket.id);
+    if (!roomIds) return;
+    for (const roomId of [...roomIds]) {
+      const room = this.rooms.get(roomId);
+      if (!room) continue;
       const playerIndex = room.players.findIndex((p) => p.id === socket.id);
       if (playerIndex === -1) continue;
 
@@ -495,6 +507,7 @@ class DabManager extends BaseManager {
         this.sendRoomInfo(room.id);
       }
     }
+    this.socketRooms.delete(socket.id);
   }
 
   sendRoomInfo(roomId) {

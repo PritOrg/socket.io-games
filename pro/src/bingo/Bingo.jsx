@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useGameContext } from '../context/GameContext';
 import { SketchButton, SketchCard, sketchPopupClass, GameLayout } from '../components/ui';
 import useSound from 'use-sound';
@@ -22,6 +22,7 @@ const Bingo = () => {
   const [, setMyPlayerIndex] = useState(-1);
   const navigate = useNavigate();
 
+  const strikedNumbersRef = useRef([]);
   const [playPop] = useSound('/sounds/pop.mp3', { volume: 0.5 });
   const [playWin] = useSound('/sounds/win.mp3', { volume: 0.7 });
   const [playTurn] = useSound('/sounds/turn.mp3', { volume: 0.6 });
@@ -91,19 +92,19 @@ const Bingo = () => {
         if (me) sessionStorage.setItem('bingo_reconnect', JSON.stringify({ roomId: id, playerId: me.id }));
       }
 
-      if (strikedNumbers && strikedNumbers.length > 0 && numbers.length === 25) {
-        setNumbers((prev) => prev.map((n) => (strikedNumbers.includes(n) ? 'X' : typeof n === 'string' ? n : n)));
+      if (strikedNumbers) {
+        strikedNumbersRef.current = strikedNumbers;
       }
     });
 
     socket.on('bingo_playerBoard', ({ board }) => {
       logger.socket('⬅️', 'bingo_playerBoard', 'Received board from server');
       const savedBoard = localStorage.getItem(`bingo_board_${roomId}`);
-      if (savedBoard) {
-        const parsed = JSON.parse(savedBoard);
-        setNumbers(parsed.map((n) => (typeof n === 'number' ? n : n)));
-      } else {
-        setNumbers(board);
+      const rawBoard = savedBoard ? JSON.parse(savedBoard) : board;
+      const sn = strikedNumbersRef.current;
+      const updatedBoard = sn.length > 0 ? rawBoard.map((n) => (sn.includes(n) ? 'X' : n)) : rawBoard;
+      setNumbers(updatedBoard);
+      if (!savedBoard) {
         localStorage.setItem(`bingo_board_${roomId}`, JSON.stringify(board));
       }
     });
@@ -200,12 +201,24 @@ const Bingo = () => {
     });
 
     socket.on('bingo_alert', ({ icon, title, text }) => {
-      Swal.fire({
-        icon,
-        title,
-        text,
-        customClass: { popup: sketchPopupClass },
-      });
+      // Auto-dismiss "Room Created" alerts that are informational
+      if (title === 'Room Created') {
+        Swal.fire({
+          icon,
+          title,
+          text,
+          timer: 2000,
+          showConfirmButton: false,
+          customClass: { popup: sketchPopupClass },
+        });
+      } else {
+        Swal.fire({
+          icon,
+          title,
+          text,
+          customClass: { popup: sketchPopupClass },
+        });
+      }
     });
 
     return () => {
@@ -219,6 +232,7 @@ const Bingo = () => {
       socket.off('bingo_playerLeft');
       socket.off('bingo_gamePaused');
       socket.off('bingo_alert');
+      sessionStorage.removeItem('bingo_reconnect');
     };
   }, [socket, roomId, playPop, playWin, playTurn, generateBoard]);
 
@@ -399,12 +413,6 @@ const Bingo = () => {
 
               {(gameState === 'ready' || gameState === 'playing') && (
                 <SketchButton onClick={handleLeaveRoom} className="w-full text-sm py-2 mt-2">
-                  Leave Room
-                </SketchButton>
-              )}
-
-              {(gameState === 'ready' || gameState === 'playing') && (
-                <SketchButton onClick={handleLeaveRoom} variant="secondary" className="w-full text-sm py-2 mt-2">
                   Leave Room
                 </SketchButton>
               )}
