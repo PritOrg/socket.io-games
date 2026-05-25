@@ -5,7 +5,6 @@ import Bingo from './Bingo';
 import { GameProvider } from '../context/GameContext';
 import { BrowserRouter } from 'react-router-dom';
 
-// Mock Socket.io
 const mockSocket = {
   id: 'mock-id',
   on: vi.fn(),
@@ -14,57 +13,180 @@ const mockSocket = {
   disconnect: vi.fn(),
 };
 
-vi.mock('socket.io-client', () => ({
-  default: () => mockSocket
-}));
+vi.mock('socket.io-client', () => ({ default: () => mockSocket }));
+vi.mock('use-sound', () => ({ default: () => [vi.fn()] }));
+vi.mock('canvas-confetti', () => ({ default: vi.fn() }));
+vi.mock('sweetalert2', () => ({ default: { fire: vi.fn().mockResolvedValue({ isConfirmed: true }) } }));
+
+const Wrapper = ({ children }) => (
+  <GameProvider>
+    <BrowserRouter>{children}</BrowserRouter>
+  </GameProvider>
+);
+
+const findEventCb = (event) => {
+  const call = mockSocket.on.mock.calls.find((c) => c[0] === event);
+  return call?.[1];
+};
 
 describe('Bingo', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
+    sessionStorage.clear();
   });
 
-  it('emits markNumber when a cell is clicked', async () => {
-    render(
-      <GameProvider>
-        <BrowserRouter>
-          <Bingo />
-        </BrowserRouter>
-      </GameProvider>
-    );
+  describe('Board Rendering', () => {
+    it('shows Create Room and Join Room buttons in waiting state', () => {
+      render(<Bingo />, { wrapper: Wrapper });
+      expect(screen.getByText('Create Room')).toBeTruthy();
+      expect(screen.getByText('Join Room')).toBeTruthy();
+    });
 
-    // Simulate being in a game and it being our turn
-    const roomInfoCall = mockSocket.on.mock.calls.find(call => call[0] === 'bingo_roomInfo');
-    if (!roomInfoCall) throw new Error('bingo_roomInfo listener not registered');
-    
-    const roomInfoCallback = roomInfoCall[1];
-    
-    await act(async () => {
-      roomInfoCallback({
-        id: '123456',
-        creator: 'mock-id',
-        players: [{ id: 'mock-id', name: 'Alice' }, { id: 'bob-id', name: 'Bob' }],
-        gameState: 'playing',
-        currentTurn: 'mock-id',
-        turnOrder: ['mock-id', 'bob-id']
+    it('renders 25 number cells when playing', async () => {
+      render(<Bingo />, { wrapper: Wrapper });
+
+      const cb = findEventCb('bingo_roomInfo');
+      await act(async () => {
+        cb({
+          id: 'BINGO1',
+          creator: 'mock-id',
+          players: [
+            { id: 'mock-id', name: 'Alice', connected: true },
+            { id: 'bob-id', name: 'Bob', connected: true },
+          ],
+          gameState: 'playing',
+          currentTurn: 'mock-id',
+          turnOrder: ['mock-id', 'bob-id'],
+        });
       });
+
+      const buttons = screen.getAllByRole('button');
+      const numberCells = buttons.filter((b) => {
+        const n = parseInt(b.textContent);
+        return n >= 1 && n <= 25;
+      });
+      expect(numberCells.length).toBe(25);
     });
 
-    // Our Bingo cells are buttons.
-    // There are 25 cells + navigation buttons.
-    const cells = screen.getAllByRole('button');
-    
-    // Find a cell with a number (not navigation)
-    const gameCell = cells.find(c => !isNaN(parseInt(c.textContent)));
-    if (!gameCell) throw new Error('Bingo cell not found');
+    it('shows BINGO progress display', async () => {
+      render(<Bingo />, { wrapper: Wrapper });
 
-    const number = parseInt(gameCell.textContent);
+      const cb = findEventCb('bingo_roomInfo');
+      await act(async () => {
+        cb({
+          id: 'BINGO1',
+          creator: 'mock-id',
+          players: [
+            { id: 'mock-id', name: 'Alice', connected: true },
+            { id: 'bob-id', name: 'Bob', connected: true },
+          ],
+          gameState: 'playing',
+          currentTurn: 'mock-id',
+          turnOrder: ['mock-id', 'bob-id'],
+        });
+      });
 
-    await act(async () => {
-      fireEvent.click(gameCell);
+      for (const letter of 'BINGO') {
+        expect(screen.getByText(letter)).toBeTruthy();
+      }
+    });
+  });
+
+  describe('Mark Numbers', () => {
+    it('emits bingo_markNumber when a cell is clicked on my turn', async () => {
+      render(<Bingo />, { wrapper: Wrapper });
+
+      const cb = findEventCb('bingo_roomInfo');
+      await act(async () => {
+        cb({
+          id: 'BINGO1',
+          creator: 'mock-id',
+          players: [
+            { id: 'mock-id', name: 'Alice', connected: true },
+            { id: 'bob-id', name: 'Bob', connected: true },
+          ],
+          gameState: 'playing',
+          currentTurn: 'mock-id',
+          turnOrder: ['mock-id', 'bob-id'],
+        });
+      });
+
+      const buttons = screen.getAllByRole('button');
+      const numberCell = buttons.find((b) => {
+        const n = parseInt(b.textContent);
+        return n >= 1 && n <= 25;
+      });
+      expect(numberCell).toBeDefined();
+      const number = parseInt(numberCell.textContent);
+
+      await act(async () => {
+        fireEvent.click(numberCell);
+      });
+
+      expect(mockSocket.emit).toHaveBeenCalledWith('bingo_markNumber', expect.objectContaining({ number }));
     });
 
-    expect(mockSocket.emit).toHaveBeenCalledWith('bingo_markNumber', expect.objectContaining({
-      number: number
-    }));
+    it('does not emit when it is not my turn', async () => {
+      render(<Bingo />, { wrapper: Wrapper });
+
+      const cb = findEventCb('bingo_roomInfo');
+      await act(async () => {
+        cb({
+          id: 'BINGO1',
+          creator: 'other-id',
+          players: [
+            { id: 'mock-id', name: 'Alice', connected: true },
+            { id: 'bob-id', name: 'Bob', connected: true },
+          ],
+          gameState: 'playing',
+          currentTurn: 'bob-id',
+          turnOrder: ['mock-id', 'bob-id'],
+        });
+      });
+
+      const buttons = screen.getAllByRole('button');
+      const numberCell = buttons.find((b) => {
+        const n = parseInt(b.textContent);
+        return n >= 1 && n <= 25;
+      });
+
+      await act(async () => {
+        fireEvent.click(numberCell);
+      });
+
+      expect(mockSocket.emit).not.toHaveBeenCalledWith('bingo_markNumber', expect.any(Object));
+    });
+
+    it('shows striked cells as stars after bingo_numberMarked', async () => {
+      render(<Bingo />, { wrapper: Wrapper });
+
+      const cb = findEventCb('bingo_roomInfo');
+      await act(async () => {
+        cb({
+          id: 'BINGO1',
+          creator: 'mock-id',
+          players: [
+            { id: 'mock-id', name: 'Alice', connected: true },
+            { id: 'bob-id', name: 'Bob', connected: true },
+          ],
+          gameState: 'playing',
+          currentTurn: 'mock-id',
+          turnOrder: ['mock-id', 'bob-id'],
+        });
+      });
+
+      const numberMarkedCb = findEventCb('bingo_numberMarked');
+      await act(async () => {
+        numberMarkedCb({
+          number: 5,
+          nextTurn: 'bob-id',
+          strikedNumbers: [5],
+        });
+      });
+
+      const stars = screen.getAllByText('★');
+      expect(stars.length).toBeGreaterThanOrEqual(1);
+    });
   });
 });

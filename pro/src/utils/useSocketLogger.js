@@ -8,13 +8,13 @@ export const useSocketLogger = (socket, events = {}) => {
     if (!socket) return;
 
     const wrappedHandlers = {};
-    
+
     Object.entries(events).forEach(([event, handler]) => {
       const wrappedHandler = (...args) => {
         logger.socket('⬅️', event, args.length === 1 ? args[0] : args);
         handler(...args);
       };
-      
+
       wrappedHandlers[event] = wrappedHandler;
       socket.on(event, wrappedHandler);
     });

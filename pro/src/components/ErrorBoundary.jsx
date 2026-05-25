@@ -1,5 +1,4 @@
 import React from 'react';
-import { Box, Typography, Button } from '@mui/material';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -7,16 +6,12 @@ class ErrorBoundary extends React.Component {
     this.state = { hasError: false, error: null, errorInfo: null };
   }
 
-  static getDerivedStateFromError(error) {
+  static getDerivedStateFromError() {
     return { hasError: true };
   }
 
   componentDidCatch(error, errorInfo) {
-    this.setState({
-      error: error,
-      errorInfo: errorInfo
-    });
-    // You can also log the error to an error reporting service here
+    this.setState({ error, errorInfo });
     console.error('Error caught by ErrorBoundary:', error, errorInfo);
   }
 
@@ -27,49 +22,24 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            minHeight: '100vh',
-            padding: 3,
-            textAlign: 'center',
-            background: 'linear-gradient(45deg, #ff9a9e 0%, #fad0c4 99%, #fad0c4 100%)'
-          }}
-        >
-          <Typography variant="h2" gutterBottom sx={{ color: '#d32f2f' }}>
-            Oops! Something went wrong
-          </Typography>
-          <Typography variant="h6" sx={{ mb: 4, color: '#666' }}>
-            We're sorry for the inconvenience. Please try refreshing the page.
-          </Typography>
-          <Button
-            variant="contained"
-            onClick={this.handleReset}
-            sx={{
-              background: 'linear-gradient(45deg, #d32f2f 30%, #f44336 90%)',
-              color: 'white',
-              '&:hover': {
-                background: 'linear-gradient(45deg, #f44336 30%, #d32f2f 90%)'
-              }
-            }}
-          >
+        <div className="flex flex-col items-center justify-center min-h-screen p-8 text-center bg-paper">
+          <h1 className="text-5xl font-hand-drawn text-red-600 mb-4">Oops! Something went wrong</h1>
+          <p className="text-xl font-handwriting text-ink mb-8">
+            We&apos;re sorry for the inconvenience. Please try refreshing the page.
+          </p>
+          <button onClick={this.handleReset} className="sketch-button px-8 py-3 text-lg">
             Try Again
-          </Button>
-          {process.env.NODE_ENV === 'development' && (
-            <Box sx={{ mt: 4, textAlign: 'left', maxWidth: '800px' }}>
-              <Typography variant="h6" gutterBottom sx={{ color: '#d32f2f' }}>
-                Error Details:
-              </Typography>
-              <pre style={{ whiteSpace: 'pre-wrap', color: '#666' }}>
+          </button>
+          {import.meta.env.DEV && (
+            <div className="mt-8 text-left max-w-2xl">
+              <h2 className="text-lg font-hand-drawn text-red-600 mb-2">Error Details:</h2>
+              <pre className="whitespace-pre-wrap text-sm text-ink/70 bg-white/50 p-4 rounded-2xl border-2 border-dashed border-red-200">
                 {this.state.error && this.state.error.toString()}
                 {this.state.errorInfo && this.state.errorInfo.componentStack}
               </pre>
-            </Box>
+            </div>
           )}
-        </Box>
+        </div>
       );
     }
 

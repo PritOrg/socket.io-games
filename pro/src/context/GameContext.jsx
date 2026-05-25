@@ -19,7 +19,11 @@ export const GameProvider = ({ children }) => {
   const socketRef = useRef(null);
 
   useEffect(() => {
-    const newSocket = io('http://localhost:4000');
+    // Use window.location.hostname for host so it works when served from any IP
+    const host = window.location.hostname || 'localhost';
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const port = import.meta.env.VITE_PORT || 4000;
+    const newSocket = io(`${protocol}//${host}:${port}`);
     socketRef.current = newSocket;
     setSocket(newSocket);
 
@@ -49,17 +53,25 @@ export const GameProvider = ({ children }) => {
     }
   }, [playerName]);
 
+  const roomIdRef = useRef(roomId);
+  useEffect(() => {
+    roomIdRef.current = roomId;
+  }, [roomId]);
+
+  const clearRoomId = (id) => {
+    if (roomIdRef.current === id) {
+      setRoomId(null);
+    }
+  };
+
   const value = {
     playerName,
     setPlayerName,
     roomId,
     setRoomId,
-    socket
+    clearRoomId,
+    socket,
   };
 
-  return (
-    <GameContext.Provider value={value}>
-      {children}
-    </GameContext.Provider>
-  );
+  return <GameContext.Provider value={value}>{children}</GameContext.Provider>;
 };

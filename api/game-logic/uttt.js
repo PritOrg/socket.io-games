@@ -1,32 +1,48 @@
 const logger = require('../utils/logger');
+const BaseManager = require('./BaseManager');
 
-class UTTTManager {
+class UTTTManager extends BaseManager {
   constructor(io) {
-    this.io = io;
-    this.rooms = new Map();
+    super(io);
+    this.gamePrefix = 'uttt';
   }
 
   handleConnection(socket) {
-    socket.on('uttt_createRoom', (playerName) => {
-      logger.socket('IN', 'uttt_createRoom', socket.id, { playerName });
+    socket.on(`${this.gamePrefix}_createRoom`, (playerName) => {
+      logger.socket('IN', `${this.gamePrefix}_createRoom`, socket.id, { playerName });
       this.createRoom(socket, playerName);
     });
-    
-    socket.on('uttt_joinRoom', (data) => {
-      logger.socket('IN', 'uttt_joinRoom', socket.id, data);
+
+    socket.on(`${this.gamePrefix}_joinRoom`, (data) => {
+      logger.socket('IN', `${this.gamePrefix}_joinRoom`, socket.id, data);
       this.joinRoom(socket, data);
     });
-    
-    socket.on('uttt_makeMove', (data) => {
-      logger.socket('IN', 'uttt_makeMove', socket.id, data);
+
+    socket.on(`${this.gamePrefix}_makeMove`, (data) => {
+      logger.socket('IN', `${this.gamePrefix}_makeMove`, socket.id, data);
       this.makeMove(socket, data);
     });
-    
-    socket.on('uttt_restartGame', (roomId) => {
-      logger.socket('IN', 'uttt_restartGame', socket.id, { roomId });
+
+    socket.on(`${this.gamePrefix}_restartGame`, (roomId) => {
+      logger.socket('IN', `${this.gamePrefix}_restartGame`, socket.id, { roomId });
       this.restartGame(socket, roomId);
     });
-    
+
+    socket.on(`${this.gamePrefix}_leaveRoom`, (roomId) => {
+      logger.socket('IN', `${this.gamePrefix}_leaveRoom`, socket.id, { roomId });
+      this.leaveRoom(socket, roomId);
+    });
+
+    socket.on(`${this.gamePrefix}_reconnect`, (data) => {
+      logger.socket('IN', `${this.gamePrefix}_reconnect`, socket.id, data);
+      this.reconnect(socket, data);
+    });
+
+    socket.on(`${this.gamePrefix}_requestRoomInfo`, (roomId) => {
+      const sanitized = this.sanitizeRoomId(roomId);
+      if (sanitized) this.sendRoomInfo(sanitized);
+    });
+
     socket.on('disconnect', () => {
       logger.warn('UTTT', `Socket disconnected: ${socket.id}`);
       this.handleDisconnect(socket);
@@ -35,9 +51,14 @@ class UTTTManager {
 
   checkInnerWin(board) {
     const lines = [
-      [0, 1, 2], [3, 4, 5], [6, 7, 8],
-      [0, 3, 6], [1, 4, 7], [2, 5, 8],
-      [0, 4, 8], [2, 4, 6]
+      [0, 1, 2],
+      [3, 4, 5],
+      [6, 7, 8],
+      [0, 3, 6],
+      [1, 4, 7],
+      [2, 5, 8],
+      [0, 4, 8],
+      [2, 4, 6],
     ];
     for (const [a, b, c] of lines) {
       if (board[a] && board[a] === board[b] && board[a] === board[c]) {
@@ -49,13 +70,22 @@ class UTTTManager {
 
   checkMacroWin(macroBoard) {
     const lines = [
-      [0, 1, 2], [3, 4, 5], [6, 7, 8],
-      [0, 3, 6], [1, 4, 7], [2, 5, 8],
-      [0, 4, 8], [2, 4, 6]
+      [0, 1, 2],
+      [3, 4, 5],
+      [6, 7, 8],
+      [0, 3, 6],
+      [1, 4, 7],
+      [2, 5, 8],
+      [0, 4, 8],
+      [2, 4, 6],
     ];
     for (const [a, b, c] of lines) {
-      if (macroBoard[a] && macroBoard[a] !== 'DEAD' && 
-          macroBoard[a] === macroBoard[b] && macroBoard[a] === macroBoard[c]) {
+      if (
+        macroBoard[a] &&
+        macroBoard[a] !== 'DEAD' &&
+        macroBoard[a] === macroBoard[b] &&
+        macroBoard[a] === macroBoard[c]
+      ) {
         return { winner: macroBoard[a], line: [a, b, c] };
       }
     }
@@ -63,190 +93,368 @@ class UTTTManager {
   }
 
   createRoom(socket, playerName) {
-    const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const roomId = this.generateRoomId();
     socket.join(roomId);
     const room = {
       id: roomId,
-      players: [{ id: socket.id, name: playerName }],
+      players: [{ id: socket.id, name: playerName, connected: true }],
       symbols: { [socket.id]: 'X' },
       currentTurn: null,
       gameState: 'waiting',
-      board: Array(9).fill(null).map(() => Array(9).fill(null)),
+      board: Array(9)
+        .fill(null)
+        .map(() => Array(9).fill(null)),
       macroBoard: Array(9).fill(null),
       activeGrid: null,
       scores: { X: 0, O: 0 },
+      wonGrids: new Set(),
       lastMove: null,
-      emptyTimer: null
     };
     this.rooms.set(roomId, room);
+    this._trackSocket(socket.id, roomId);
     logger.success('UTTT', `Room created: ${roomId} by ${playerName} (${socket.id})`);
     this.sendRoomInfo(roomId);
   }
 
   joinRoom(socket, { roomId, playerName }) {
-    const room = this.rooms.get(roomId?.toUpperCase());
+    const roomIdSanitized = this.sanitizeRoomId(roomId);
+    const room = this.rooms.get(roomIdSanitized);
     if (!room) {
       logger.warn('UTTT', `Join failed: Room ${roomId} not found`);
-      socket.emit('uttt_error', { message: 'Room not found' });
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Error',
+        text: 'Room not found',
+      });
       return;
     }
     if (room.players.length >= 2) {
       logger.warn('UTTT', `Join failed: Room ${roomId} is full`);
-      socket.emit('uttt_error', { message: 'Room is full' });
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Error',
+        text: 'Room is full',
+      });
       return;
     }
 
     socket.join(room.id);
-    room.players.push({ id: socket.id, name: playerName });
+    room.players.push({ id: socket.id, name: playerName, connected: true });
     room.symbols[socket.id] = 'O';
+    this._trackSocket(socket.id, room.id);
     room.gameState = 'playing';
     room.currentTurn = room.players[0].id;
-    
+
     if (room.emptyTimer) {
-      clearTimeout(room.emptyTimer);
-      room.emptyTimer = null;
+      this.clearTimer(`empty_${roomId}`);
     }
 
     logger.success('UTTT', `Player ${playerName} (${socket.id}) joined room ${roomId}`);
-    this.io.to(room.id).emit('uttt_gameStarted');
+    this.io.to(room.id).emit(`${this.gamePrefix}_gameStarted`);
     this.sendRoomInfo(roomId);
   }
 
   restartGame(socket, roomId) {
-    const room = this.rooms.get(roomId);
+    const roomIdSanitized = this.sanitizeRoomId(roomId);
+    const room = this.rooms.get(roomIdSanitized);
     if (!room) return;
 
-    room.board = Array(9).fill(null).map(() => Array(9).fill(null));
+    room.board = Array(9)
+      .fill(null)
+      .map(() => Array(9).fill(null));
     room.macroBoard = Array(9).fill(null);
     room.activeGrid = null;
     room.scores = { X: 0, O: 0 };
+    room.wonGrids = new Set();
     room.lastMove = null;
     room.gameState = 'playing';
     room.currentTurn = room.players[0].id;
-    
+
     logger.info('UTTT', `Game restarted in room ${roomId}`);
-    this.io.to(roomId).emit('uttt_gameStarted');
+    this.io.to(roomId).emit(`${this.gamePrefix}_gameStarted`);
     this.sendRoomInfo(roomId);
   }
 
   makeMove(socket, { roomId, gridIndex, squareIndex }) {
-    const room = this.rooms.get(roomId);
+    const roomIdSanitized = this.sanitizeRoomId(roomId);
+    const room = this.rooms.get(roomIdSanitized);
     if (!room) {
       logger.warn('UTTT', `Move failed: Room ${roomId} not found`);
-      socket.emit('uttt_error', { message: 'Room not found' });
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Error',
+        text: 'Room not found',
+      });
       return;
     }
     if (room.gameState !== 'playing') {
       logger.warn('UTTT', `Move failed: Game not active in ${roomId}`);
-      socket.emit('uttt_error', { message: 'Game is not in progress' });
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Error',
+        text: 'Game is not in progress',
+      });
       return;
     }
     if (room.currentTurn !== socket.id) {
       logger.warn('UTTT', `Move failed: Not ${socket.id}'s turn in ${roomId}`);
-      socket.emit('uttt_error', { message: 'Not your turn' });
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Error',
+        text: 'Not your turn',
+      });
+      return;
+    }
+    if (typeof gridIndex !== 'number' || gridIndex < 0 || gridIndex > 8) {
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Error',
+        text: 'Invalid grid index',
+      });
+      return;
+    }
+    if (typeof squareIndex !== 'number' || squareIndex < 0 || squareIndex > 8) {
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Error',
+        text: 'Invalid square index',
+      });
       return;
     }
     if (room.activeGrid !== null && room.activeGrid !== gridIndex) {
-      socket.emit('uttt_error', { message: `Must play in grid ${room.activeGrid}` });
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Error',
+        text: `Must play in grid ${room.activeGrid}`,
+      });
       return;
     }
     if (room.board[gridIndex][squareIndex] !== null) {
-      socket.emit('uttt_error', { message: 'Square already occupied' });
-      return;
-    }
-    if (room.macroBoard[gridIndex] !== null && room.macroBoard[gridIndex] !== 'DEAD') {
-      socket.emit('uttt_error', { message: 'Grid already won' });
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Error',
+        text: 'Square already occupied',
+      });
       return;
     }
 
     const symbol = room.symbols[socket.id];
-    const player = room.players.find(p => p.id === socket.id);
-    
+    const player = room.players.find((p) => p.id === socket.id);
+
     room.board[gridIndex][squareIndex] = symbol;
     logger.info('UTTT', `Move: ${player?.name} (${symbol}) played [${gridIndex},${squareIndex}] in ${roomId}`);
 
     const innerResult = this.checkInnerWin(room.board[gridIndex]);
-    if (innerResult.winner) {
-      room.macroBoard[gridIndex] = symbol;
-      room.scores[symbol]++;
-      logger.info('UTTT', `Inner win: Grid ${gridIndex} won by ${symbol}! Score: X=${room.scores.X}, O=${room.scores.O}`);
-    } else if (room.board[gridIndex].every(cell => cell !== null)) {
+    if (innerResult.winner && !['X', 'O', 'DEAD'].includes(room.macroBoard[gridIndex])) {
+      room.macroBoard[gridIndex] = innerResult.winner;
+      room.scores[innerResult.winner]++;
+      room.wonGrids.add(gridIndex);
+      logger.info(
+        'UTTT',
+        `Inner win: Grid ${gridIndex} won by ${innerResult.winner}! Score: X=${room.scores.X}, O=${room.scores.O}`,
+      );
+    }
+
+    const isGridFull = room.board[gridIndex].every((cell) => cell !== null);
+    if (isGridFull && !room.macroBoard[gridIndex]) {
       room.macroBoard[gridIndex] = 'DEAD';
     }
 
     const macroResult = this.checkMacroWin(room.macroBoard);
     if (macroResult) {
       room.gameState = 'ended';
-      const winnerPlayer = room.players.find(p => room.symbols[p.id] === symbol);
+      const winnerPlayer = room.players.find((p) => room.symbols[p.id] === symbol);
       logger.success('UTTT', `GAME OVER! ${symbol} wins by macro in ${roomId}!`);
-      this.io.to(room.id).emit('uttt_gameOver', { 
-        winner: winnerPlayer?.id || socket.id, 
+      this.io.to(room.id).emit(`${this.gamePrefix}_gameOver`, {
+        winner: winnerPlayer?.id || socket.id,
         symbol,
-        scores: room.scores, 
+        scores: room.scores,
         reason: 'macro_win',
-        winningLine: macroResult.line
+        winningLine: macroResult.line,
       });
       this.sendRoomInfo(room.id);
       return;
     }
 
-    if (room.board.every(grid => grid.every(cell => cell !== null))) {
+    if (room.board.every((grid) => grid.every((cell) => cell !== null))) {
       room.gameState = 'ended';
-      const winnerSymbol = room.scores.X > room.scores.O ? 'X' : (room.scores.O > room.scores.X ? 'O' : 'TIE');
-      const winnerPlayer = winnerSymbol === 'TIE' ? null : room.players.find(p => room.symbols[p.id] === winnerSymbol);
-      logger.success('UTTT', `GAME OVER! Tiebreaker - ${winnerSymbol} wins (${room.scores.X}-${room.scores.O}) in ${roomId}`);
-      this.io.to(room.id).emit('uttt_gameOver', { 
-        winner: winnerPlayer?.id || null, 
+      const winnerSymbol = room.scores.X > room.scores.O ? 'X' : room.scores.O > room.scores.X ? 'O' : 'TIE';
+      const winnerPlayer =
+        winnerSymbol === 'TIE' ? null : room.players.find((p) => room.symbols[p.id] === winnerSymbol);
+      logger.success(
+        'UTTT',
+        `GAME OVER! Tiebreaker - ${winnerSymbol} wins (${room.scores.X}-${room.scores.O}) in ${roomId}`,
+      );
+      this.io.to(room.id).emit(`${this.gamePrefix}_gameOver`, {
+        winner: winnerPlayer?.id || null,
         symbol: winnerSymbol,
-        scores: room.scores, 
-        reason: 'tiebreaker' 
+        scores: room.scores,
+        reason: 'tiebreaker',
       });
       this.sendRoomInfo(room.id);
       return;
     }
 
     const nextGrid = squareIndex;
-    if (room.macroBoard[nextGrid] !== null) {
+    const isNextGridFull = room.board[nextGrid].every((cell) => cell !== null);
+
+    if (isNextGridFull) {
       room.activeGrid = null;
     } else {
       room.activeGrid = nextGrid;
     }
 
     room.lastMove = { gridIndex, squareIndex };
-    room.currentTurn = room.players.find(p => p.id !== socket.id).id;
+    room.currentTurn = room.players.find((p) => p.id !== socket.id).id;
 
     logger.debug('UTTT', `Next turn: ${room.currentTurn}, Active grid: ${room.activeGrid}`);
-    this.io.to(room.id).emit('uttt_gameState', room);
+    this.emitGameState(room.id);
+  }
+
+  emitGameState(roomId) {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    const cleanRoom = {
+      id: room.id,
+      players: room.players,
+      symbols: room.symbols,
+      currentTurn: room.currentTurn,
+      gameState: room.gameState,
+      board: room.board,
+      macroBoard: room.macroBoard,
+      activeGrid: room.activeGrid,
+      scores: room.scores,
+      lastMove: room.lastMove,
+    };
+    this.io.to(roomId).emit(`${this.gamePrefix}_gameState`, cleanRoom);
   }
 
   handleDisconnect(socket) {
-    for (const [roomId, room] of this.rooms.entries()) {
-      const playerIndex = room.players.findIndex(p => p.id === socket.id);
-      if (playerIndex !== -1) {
-        const playerName = room.players[playerIndex].name;
-        room.players = room.players.filter(p => p.id !== socket.id);
-        logger.warn('UTTT', `Player ${playerName} left room ${roomId}`);
-        this.io.to(roomId).emit('uttt_playerLeft', { playerId: socket.id });
-        
-        if (room.players.length === 0) {
-          logger.info('UTTT', `Room ${roomId} empty - starting 5min cleanup timer`);
-          room.emptyTimer = setTimeout(() => {
+    const roomIds = this.socketRooms.get(socket.id);
+    if (!roomIds) return;
+    for (const roomId of [...roomIds]) {
+      const room = this.rooms.get(roomId);
+      if (!room) continue;
+      const playerIndex = room.players.findIndex((p) => p.id === socket.id);
+      if (playerIndex === -1) continue;
+
+      room.players[playerIndex].connected = false;
+
+      if (room.gameState === 'playing') {
+        const activeCount = room.players.filter((p) => p.connected).length;
+
+        if (activeCount === 0) {
+          this.registerEmptyTimer(roomId, () => {
             this.rooms.delete(roomId);
-            logger.info('UTTT', `Room ${roomId} deleted (timeout)`);
-          }, 5 * 60 * 1000);
-        } else {
-          room.gameState = 'waiting';
-          this.sendRoomInfo(roomId);
+            logger.info('UTTT', `Room ${roomId} deleted (empty)`);
+          });
+        } else if (activeCount === 1) {
+          room.gameState = 'paused';
+          this.io.to(room.id).emit(`${this.gamePrefix}_gamePaused`, { reason: 'Opponent disconnected' });
         }
+
+        this.io.to(room.id).emit(`${this.gamePrefix}_playerLeft`, { playerId: socket.id });
+        this.sendRoomInfo(room.id);
       }
     }
+    this.socketRooms.delete(socket.id);
+  }
+
+  leaveRoom(socket, roomId) {
+    const roomIdSanitized = this.sanitizeRoomId(roomId);
+    const room = this.rooms.get(roomIdSanitized);
+    if (!room) return;
+
+    const playerIndex = room.players.findIndex((p) => p.id === socket.id);
+    if (playerIndex === -1) return;
+
+    if (room.gameState === 'playing') {
+      room.players[playerIndex].connected = false;
+
+      const activeCount = room.players.filter((p) => p.connected).length;
+
+      if (activeCount === 0) {
+        this.registerEmptyTimer(roomId, () => {
+          this.rooms.delete(roomId);
+        });
+      } else if (activeCount === 1) {
+        room.gameState = 'paused';
+        this.io.to(room.id).emit(`${this.gamePrefix}_gamePaused`, { reason: 'Opponent disconnected' });
+      }
+    } else {
+      room.players.splice(playerIndex, 1);
+      if (room.players.length === 0) {
+        this.rooms.delete(roomIdSanitized);
+        return;
+      }
+    }
+
+    this._untrackSocket(socket.id, room.id);
+    this.io.to(room.id).emit(`${this.gamePrefix}_playerLeft`, { playerId: socket.id });
+    this.sendRoomInfo(room.id);
+  }
+
+  reconnect(socket, { roomId, playerId }) {
+    const roomIdSanitized = this.sanitizeRoomId(roomId);
+    const room = this.rooms.get(roomIdSanitized);
+    if (!room) {
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Error',
+        text: 'Room not found',
+      });
+      return;
+    }
+
+    const player = room.players.find((p) => p.id === playerId);
+    if (!player) {
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Error',
+        text: 'Player not found',
+      });
+      return;
+    }
+
+    socket.join(room.id);
+    player.id = socket.id;
+    player.connected = true;
+    this._trackSocket(socket.id, room.id);
+
+    this.clearTimer(`empty_${roomId}`);
+
+    if (room.gameState === 'paused') {
+      const activeCount = room.players.filter((p) => p.connected).length;
+      if (activeCount >= 2) {
+        room.gameState = 'playing';
+        this.clearTimer(`forfeit_${roomId}`);
+        this.io.to(room.id).emit(`${this.gamePrefix}_alert`, {
+          icon: 'success',
+          title: 'Player Reconnected',
+          text: 'Game resumed!',
+        });
+      }
+    }
+
+    this.sendRoomInfo(room.id);
   }
 
   sendRoomInfo(roomId) {
     const room = this.rooms.get(roomId);
-    if (room) {
-      this.io.to(roomId).emit('uttt_roomInfo', room);
-    }
+    if (!room) return;
+    const cleanRoom = {
+      id: room.id,
+      players: room.players,
+      symbols: room.symbols,
+      currentTurn: room.currentTurn,
+      gameState: room.gameState,
+      board: room.board,
+      macroBoard: room.macroBoard,
+      activeGrid: room.activeGrid,
+      scores: room.scores,
+      lastMove: room.lastMove,
+    };
+    this.io.to(roomId).emit(`${this.gamePrefix}_roomInfo`, cleanRoom);
   }
 }
 

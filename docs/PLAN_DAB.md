@@ -7,13 +7,13 @@ Dots grid: `(rows+1) × (cols+1)` (inferred, not stored)
 
 ### Grid Sizing
 
-| Mode | rows | cols | total boxes | dots per side |
-|------|------|------|-------------|---------------|
-| Classic | 9 | 9 | 81 | 10×10 |
-| Extended | 14 | 14 | 196 | 15×15 |
-| Marathon | 19 | 19 | 361 | 20×20 |
-| Custom (min) | 1 | 1 | 1 | 2×2 |
-| Custom (max) | 30 | 30 | 900 | 31×31 |
+| Mode         | rows | cols | total boxes | dots per side |
+| ------------ | ---- | ---- | ----------- | ------------- |
+| Classic      | 9    | 9    | 81          | 10×10         |
+| Extended     | 14   | 14   | 196         | 15×15         |
+| Marathon     | 19   | 19   | 361         | 20×20         |
+| Custom (min) | 1    | 1    | 1           | 2×2           |
+| Custom (max) | 30   | 30   | 900         | 31×31         |
 
 ### Board Arrays
 
@@ -25,11 +25,11 @@ verticalLines[r][c]    = playerIndex | null    // rows × (cols+1)  — line lef
 
 ### Player Colors (Sequential Palette)
 
-| Seat | Tailwind | Hex |
-|------|----------|-----|
-| P1 (index 0) | `blue-500` | `#3B82F6` |
-| P2 (index 1) | `red-500` | `#EF4444` |
-| P3 (index 2) | `green-500` | `#22C55E` |
+| Seat         | Tailwind     | Hex       |
+| ------------ | ------------ | --------- |
+| P1 (index 0) | `blue-500`   | `#3B82F6` |
+| P2 (index 1) | `red-500`    | `#EF4444` |
+| P3 (index 2) | `green-500`  | `#22C55E` |
 | P4 (index 3) | `orange-500` | `#F97316` |
 
 ---
@@ -52,19 +52,19 @@ pro/src/
 
 ## Socket Events
 
-| Event | Direction | Payload |
-|-------|-----------|---------|
-| `dab_createRoom` | C→S | `{ mode, customRows?, customCols?, customPlayers? }` |
-| `dab_joinRoom` | C→S | `{ roomId, playerName }` |
-| `dab_reconnect` | C→S | `{ roomId, playerId }` |
-| `dab_makeMove` | C→S | `{ roomId, lineType: 'h'\|'v', r, c }` |
-| `dab_roomInfo` | S→C | Full room state |
-| `dab_gameStarted` | S→C | `{ firstTurn }` |
-| `dab_moveResult` | S→C | `{ lineType, r, c, claimedBoxes, scores, currentTurn, currentPlayer }` |
-| `dab_gameOver` | S→C | `{ winner, scores, winners? }` |
-| `dab_playerLeft` | S→C | `{ playerId }` |
-| `dab_gamePaused` | S→C | `{ reason }` |
-| `dab_alert` | S→C | `{ icon, title, text }` |
+| Event             | Direction | Payload                                                                |
+| ----------------- | --------- | ---------------------------------------------------------------------- |
+| `dab_createRoom`  | C→S       | `{ mode, customRows?, customCols?, customPlayers? }`                   |
+| `dab_joinRoom`    | C→S       | `{ roomId, playerName }`                                               |
+| `dab_reconnect`   | C→S       | `{ roomId, playerId }`                                                 |
+| `dab_makeMove`    | C→S       | `{ roomId, lineType: 'h'\|'v', r, c }`                                 |
+| `dab_roomInfo`    | S→C       | Full room state                                                        |
+| `dab_gameStarted` | S→C       | `{ firstTurn }`                                                        |
+| `dab_moveResult`  | S→C       | `{ lineType, r, c, claimedBoxes, scores, currentTurn, currentPlayer }` |
+| `dab_gameOver`    | S→C       | `{ winner, scores, winners? }`                                         |
+| `dab_playerLeft`  | S→C       | `{ playerId }`                                                         |
+| `dab_gamePaused`  | S→C       | `{ reason }`                                                           |
+| `dab_alert`       | S→C       | `{ icon, title, text }`                                                |
 
 ---
 
@@ -127,6 +127,7 @@ tie possible if multiple players tie for highest score
 CSS Grid produces ~3,721 DOM nodes for a 30×30 custom game (961 dots + 1,860 lines + 900 boxes). On mobile this causes severe lag.
 
 **Fix:** Render the board as a single `<svg>` element with a `viewBox`:
+
 - Dots → `<circle cx={c * spacing} cy={r * spacing} r={radius} vector-effect="non-scaling-stroke" />`
 - Lines → `<line x1 y1 x2 y2 vector-effect="non-scaling-stroke" />` with a transparent wider stroke for hit target
 - Boxes → `<rect x y width height fill={playerColor} opacity={0.3} />`
@@ -138,11 +139,13 @@ CSS Grid produces ~3,721 DOM nodes for a 30×30 custom game (961 dots + 1,860 li
 A disconnected player in a Marathon game permanently stalls the loop.
 
 **Fix:** Player objects store `connected: boolean`. Turn advancement skips disconnected players:
+
 ```javascript
 do {
   currentTurn = (currentTurn + 1) % players.length;
 } while (!players[currentTurn].connected && activeCount > 1);
 ```
+
 If all but one player disconnects, emit `dab_gamePaused` and start a 5-min forfeit timer.
 
 ### 3. Reconnection Protocol
@@ -152,11 +155,13 @@ A 5-second wifi drop should not end the game.
 **Fix:** Add `dab_reconnect` event.
 
 Frontend side:
+
 - On successful `dab_createRoom` or `dab_joinRoom`, save `{ roomId, playerId }` to `sessionStorage`
 - On `DabGame.jsx` mount, check `sessionStorage`. If values exist, auto-emit `dab_reconnect` instead of showing the lobby
 - Session storage is cleared on explicit leave/room close but survives accidental tab refresh
 
 Backend side:
+
 - Server matches the provided `playerId` to an existing room (if `playerId` matches a stored player in the room)
 - Clears any pending `emptyTimer`
 - Updates the socket reference: `player.id = socket.id` (new socket ID from refresh)
@@ -169,6 +174,7 @@ Backend side:
 Malicious or malformed payloads must never reach array accesses.
 
 **Fix:** At the top of `makeMove`, validate every field:
+
 ```javascript
 if (typeof r !== 'number' || typeof c !== 'number') return;
 if (typeof roomId !== 'string') return;
@@ -190,6 +196,7 @@ Duplicate `dab_makeMove` events from high-latency jitter must not double-claim a
 ### Phase 1 — Server Foundation
 
 **Step 1** — `api/game-logic/dab.js`: DabManager class skeleton
+
 - `constructor(io)` — `this.rooms = new Map()`
 - `handleConnection(socket)` — register event listeners
 - `createRoom(socket, { mode, customRows, customCols, customPlayers })` — bounds check, init arrays
@@ -199,6 +206,7 @@ Duplicate `dab_makeMove` events from high-latency jitter must not double-claim a
 - `sendRoomInfo(roomId)` — emit `dab_roomInfo`
 
 **Step 2** — `api/game-logic/dab.js`: Core logic
+
 - `makeMove(socket, { roomId, lineType, r, c })` — strict bounds validation, validate turn, validate line is null
 - `checkBoxes(room, r, c, lineType)` — returns count of newly completed boxes (with idempotency guard)
 - `isBoxComplete(room, boxR, boxC)` — checks all 4 sides
@@ -207,6 +215,7 @@ Duplicate `dab_makeMove` events from high-latency jitter must not double-claim a
 - Win detection → emit `dab_gameOver`
 
 **Step 3** — `api/test/dab.test.js`: Backend tests
+
 - Create room with valid params
 - Reject `customRows > 30`
 - Reject `customPlayers > 4`
@@ -221,6 +230,7 @@ Duplicate `dab_makeMove` events from high-latency jitter must not double-claim a
 - Test disconnected-player turn skip
 
 **Step 4** — `api/index.js`: Wire DabManager
+
 - `const DabManager = require('./game-logic/dab')`
 - `const dabManager = new DabManager(io)`
 - `dabManager.handleConnection(socket)` inside `io.on('connection')`
@@ -228,6 +238,7 @@ Duplicate `dab_makeMove` events from high-latency jitter must not double-claim a
 ### Phase 2 — Frontend
 
 **Step 5** — `pro/src/dab/DabGame.jsx`: Lobby UI
+
 - Create/join room interface (mirror TicTacToe pattern)
 - Mode selector: Classic / Extended / Marathon / Custom
 - Custom mode reveals: rows input, cols input, players input (2-4)
@@ -236,6 +247,7 @@ Duplicate `dab_makeMove` events from high-latency jitter must not double-claim a
 - Reconnection badge if returning to an active game
 
 **Step 6** — `pro/src/dab/DabGame.jsx`: SVG Board rendering
+
 - Single `<svg>` element with `viewBox` computed from grid dimensions
 - `<circle>` elements at every dot intersection
 - `<line>` elements for every horizontal and vertical line slot
@@ -244,12 +256,14 @@ Duplicate `dab_makeMove` events from high-latency jitter must not double-claim a
 - No CSS Grid, no DOM explosion — SVG `viewBox` handles all scaling
 
 **Step 7** — Zoom wrapper
+
 - `npm install react-zoom-pan-pinch`
 - `<TransformWrapper>` wraps SVG board
 - Constrained to viewport (`limitToBounds`, `minScale`, `maxScale`)
 - Mobile-friendly pan/zoom — SVG redraws natively, no layout thrashing
 
 **Step 8** — Click handlers
+
 - Click on transparent hit-target lines triggers `dab_makeMove` emit
 - On `dab_moveResult`: update local state, highlight claimed box fill
 - Disconnected player indicator on scoreboard (grayed out)
@@ -258,10 +272,12 @@ Duplicate `dab_makeMove` events from high-latency jitter must not double-claim a
 ### Phase 3 — Polish
 
 **Step 9** — Routing + Landing
+
 - Add `/dab` route in `App.jsx`
 - Add DAB GameCard to `PaperPartyLanding.jsx`
 
 **Step 10** — FX & Edge Cases
+
 - `use-sound`: scratch on line placement, ding on box claim
 - `dab_gameOver` → canvas-confetti + SweetAlert (winner/tie)
 - 5-minute forfeit timer when all remaining players disconnect

@@ -2,6 +2,8 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const logger = require('./utils/logger');
 const BingoManager = require('./game-logic/bingo');
 const TicTacToeManager = require('./game-logic/tictactoe');
@@ -9,8 +11,33 @@ const UTTTManager = require('./game-logic/uttt');
 const DabManager = require('./game-logic/dab');
 
 const app = express();
-app.use(cors());
+
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map((s) => s.trim())
+  : ['http://localhost:5173', 'http://localhost:4000'];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+};
+
+app.use(helmet());
+app.use(cors(corsOptions));
 app.use(express.json());
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { status: 429, error: 'Too many requests, please try again later.' },
+});
+app.use(limiter);
 
 app.use((req, res, next) => {
   logger.debug('HTTP', `${req.method} ${req.path}`);
@@ -20,12 +47,15 @@ app.use((req, res, next) => {
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
-  }
+    origin: process.env.ALLOWED_ORIGINS
+      ? process.env.ALLOWED_ORIGINS.split(',').map((s) => s.trim())
+      : ['http://localhost:5173', 'http://localhost:4000'],
+    methods: ['GET', 'POST'],
+  },
 });
 
 const PORT = process.env.PORT || 4000;
+const HOST = process.env.HOST || '0.0.0.0';
 
 const bingoManager = new BingoManager(io);
 const tictactoeManager = new TicTacToeManager(io);
@@ -45,10 +75,61 @@ io.on('connection', (socket) => {
   });
 });
 
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime() });
+});
+
+app.get('/health/ready', (req, res) => {
+  res.json({ status: 'ok', ready: true });
+});
+
+app.get('/stats', (req, res) => {
+  res.json({
+    bingo: { rooms: bingoManager.rooms.size },
+    tictactoe: { rooms: tictactoeManager.rooms.size },
+    uttt: { rooms: utttManager.rooms.size },
+    dab: { rooms: dabManager.rooms.size },
+    connections: io.engine.clientsCount,
+  });
+});
+
+app.post('/cleanup', (req, res) => {
+  let cleaned = 0;
+  for (const manager of [bingoManager, tictactoeManager, utttManager, dabManager]) {
+    for (const [id, room] of manager.rooms) {
+      const allGone = room.players.every((p) => !p.connected);
+      if (allGone) {
+        manager.rooms.delete(id);
+        cleaned++;
+      }
+    }
+  }
+  res.json({ cleaned });
+});
+
+function shutdown() {
+  logger.warn('SERVER', 'Shutting down gracefully...');
+
+  for (const manager of [bingoManager, tictactoeManager, utttManager, dabManager]) {
+    for (const [id] of manager.rooms) {
+      io.to(id).emit('server_shutdown', { message: 'Server is shutting down' });
+    }
+    manager.timers.forEach((timerId) => {
+      clearTimeout(timerId);
+    });
+    manager.timers.clear();
+  }
+
+  server.close();
+}
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
 if (process.env.NODE_ENV !== 'test') {
-  server.listen(PORT, () => {
+  server.listen(PORT, HOST, () => {
     logger.success('SERVER', `Unified Optimized Server running on port ${PORT}`);
   });
 }
 
-module.exports = { server, io, bingoManager, tictactoeManager, utttManager, dabManager };
+module.exports = { server, io, bingoManager, tictactoeManager, utttManager, dabManager, shutdown };
