@@ -55,10 +55,13 @@ describe('Cross-Game Integration Tests', function () {
           });
 
           player2.emit('dab_joinRoom', { roomId: dabRoom.id, playerName: 'Charlie' });
-          player2.once('dab_gameStarted', () => {
-            bingoGotDabEvent.then((gotEvent) => {
-              expect(gotEvent).to.equal(false);
-              done();
+          player2.once('dab_roomInfo', () => {
+            player2.emit('dab_startGame', { roomId: dabRoom.id });
+            player2.once('dab_gameStarted', () => {
+              bingoGotDabEvent.then((gotEvent) => {
+                expect(gotEvent).to.equal(false);
+                done();
+              });
             });
           });
         });
@@ -193,7 +196,10 @@ describe('Cross-Game Integration Tests', function () {
         });
         player1.once('dab_roomInfo', (room) => {
           player2.emit('dab_joinRoom', { roomId: room.id, playerName: 'P2' });
-          player2.once('dab_gameStarted', () => resolve(room.id));
+          player2.once('dab_roomInfo', () => {
+            player1.emit('dab_startGame', { roomId: room.id });
+            player1.once('dab_gameStarted', () => resolve(room.id));
+          });
         });
       });
 
@@ -270,7 +276,10 @@ describe('Cross-Game Integration Tests', function () {
         player1.emit('dab_createRoom', { mode: 'custom', customRows: 3, customCols: 3 });
         player1.once('dab_roomInfo', (room) => {
           player2.emit('dab_joinRoom', { roomId: room.id, playerName: 'Bob' });
-          player2.once('dab_gameStarted', () => resolve(room.id));
+          player2.once('dab_roomInfo', () => {
+            player1.emit('dab_startGame', { roomId: room.id });
+            player1.once('dab_gameStarted', () => resolve(room.id));
+          });
         });
       });
 
@@ -289,7 +298,10 @@ describe('Cross-Game Integration Tests', function () {
         player1.emit('dab_createRoom', { mode: 'custom', customRows: 3, customCols: 3 });
         player1.once('dab_roomInfo', (room) => {
           player2.emit('dab_joinRoom', { roomId: room.id, playerName: 'Bob' });
-          player2.once('dab_gameStarted', () => resolve(room.id));
+          player2.once('dab_roomInfo', () => {
+            player1.emit('dab_startGame', { roomId: room.id });
+            player1.once('dab_gameStarted', () => resolve(room.id));
+          });
         });
       });
 

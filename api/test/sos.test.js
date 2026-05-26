@@ -96,62 +96,64 @@ describe('SOS Game Logic', function () {
 
   describe('Game Flow', () => {
     it('should start game when host clicks start', (done) => {
-      let roomId;
       player1.emit('sos_createRoom', { playerName: 'Alice' });
       player1.once('sos_roomInfo', (room) => {
-        roomId = room.id;
+        const roomId = room.id;
         player2.emit('sos_joinRoom', { roomId, playerName: 'Bob' });
-      });
-      player1.once('sos_roomInfo', () => {
-        player1.emit('sos_startGame', { roomId });
-      });
-      player1.once('sos_gameStarted', () => {
-        done();
+        player1.once('sos_roomInfo', () => {
+          player1.emit('sos_startGame', { roomId });
+          player1.once('sos_gameStarted', () => {
+            done();
+          });
+        });
       });
     });
   });
 
   describe('Move Validation', () => {
     it('should place S and O on valid moves', (done) => {
-      let roomId;
       player1.emit('sos_createRoom', { playerName: 'Alice', size: 4 });
       player1.once('sos_roomInfo', (room) => {
-        roomId = room.id;
+        const roomId = room.id;
         player2.emit('sos_joinRoom', { roomId, playerName: 'Bob' });
-      });
-      player1.once('sos_roomInfo', () => {
-        player1.emit('sos_startGame', { roomId });
-      });
-      player1.once('sos_gameStarted', () => {
-        player1.emit('sos_makeMove', { roomId, row: 0, col: 0, value: 'S' });
-      });
-      player1.once('sos_moveMade', (data) => {
-        expect(data.value).to.equal('S');
-        expect(data.row).to.equal(0);
-        expect(data.col).to.equal(0);
-        done();
+        player1.once('sos_roomInfo', () => {
+          player1.emit('sos_startGame', { roomId });
+          player1.once('sos_gameStarted', () => {
+            player1.emit('sos_makeMove', { roomId, row: 0, col: 0, value: 'S' });
+          });
+          player1.once('sos_moveMade', (data) => {
+            expect(data.value).to.equal('S');
+            expect(data.row).to.equal(0);
+            expect(data.col).to.equal(0);
+            done();
+          });
+        });
       });
     });
 
     it('should reject move out of turn', (done) => {
-      let roomId;
+      let timeout = setTimeout(() => done(new Error('timeout')), 1500);
       player1.emit('sos_createRoom', { playerName: 'Alice', size: 4 });
       player1.once('sos_roomInfo', (room) => {
-        roomId = room.id;
+        const roomId = room.id;
         player2.emit('sos_joinRoom', { roomId, playerName: 'Bob' });
-      });
-      player1.once('sos_roomInfo', () => {
-        player1.emit('sos_startGame', { roomId });
-      });
-      player1.once('sos_gameStarted', () => {
-        player2.emit('sos_makeMove', { roomId, row: 0, col: 0, value: 'S' });
-      });
-      player2.once('sos_moveMade', () => {
-        done(new Error('Should not have received moveMade'));
-      });
-      player2.once('sos_alert', (alert) => {
-        expect(alert.icon).to.equal('error');
-        done();
+        player2.once('sos_roomInfo', () => {
+          player1.emit('sos_startGame', { roomId });
+          player1.once('sos_gameStarted', () => {
+            clearTimeout(timeout);
+            player2.emit('sos_makeMove', { roomId, row: 0, col: 0, value: 'S' });
+            timeout = setTimeout(() => done(new Error('timeout')), 1500);
+          });
+          player2.once('sos_moveMade', () => {
+            clearTimeout(timeout);
+            done(new Error('Should not have received moveMade'));
+          });
+          player2.once('sos_alert', (alert) => {
+            clearTimeout(timeout);
+            expect(alert.icon).to.equal('error');
+            done();
+          });
+        });
       });
     });
   });

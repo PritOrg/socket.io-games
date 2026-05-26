@@ -54,91 +54,92 @@ describe('Connect4 Game Logic', function () {
 
   describe('Join Room', () => {
     it('should join as player', (done) => {
-      let roomId;
       player1.emit('c4_createRoom', { playerName: 'Alice' });
       player1.once('c4_roomInfo', (room) => {
-        roomId = room.id;
+        const roomId = room.id;
         player2.emit('c4_joinRoom', { roomId, playerName: 'Bob' });
-      });
-      player1.once('c4_roomInfo', (room) => {
-        expect(room.players).to.have.lengthOf(2);
-        done();
+        player1.once('c4_roomInfo', (room2) => {
+          expect(room2.players).to.have.lengthOf(2);
+          done();
+        });
       });
     });
 
     it('should join as spectator when room full', (done) => {
-      let roomId;
       player1.emit('c4_createRoom', { playerName: 'Alice' });
       player1.once('c4_roomInfo', (room) => {
-        roomId = room.id;
+        const roomId = room.id;
         player2.emit('c4_joinRoom', { roomId, playerName: 'Bob' });
-        spectator.emit('c4_joinRoom', { roomId, playerName: 'Spectator', asSpectator: true });
-      });
-      player1.once('c4_roomInfo', (room) => {
-        expect(room.spectators).to.have.lengthOf(1);
-        done();
+        player1.once('c4_roomInfo', () => {
+          spectator.emit('c4_joinRoom', { roomId, playerName: 'Spectator', asSpectator: true });
+          player1.once('c4_roomInfo', (room3) => {
+            expect(room3.spectators).to.have.lengthOf(1);
+            done();
+          });
+        });
       });
     });
   });
 
   describe('Game Flow', () => {
     it('should start game when host clicks start', (done) => {
-      let roomId;
       player1.emit('c4_createRoom', { playerName: 'Alice' });
       player1.once('c4_roomInfo', (room) => {
-        roomId = room.id;
+        const roomId = room.id;
         player2.emit('c4_joinRoom', { roomId, playerName: 'Bob' });
-      });
-      player1.once('c4_roomInfo', () => {
-        player1.emit('c4_startGame', { roomId });
-      });
-      player1.once('c4_gameStarted', () => {
-        done();
+        player1.once('c4_roomInfo', () => {
+          player1.emit('c4_startGame', { roomId });
+          player1.once('c4_gameStarted', () => {
+            done();
+          });
+        });
       });
     });
   });
 
   describe('Move Validation', () => {
     it('should drop disc in column', (done) => {
-      let roomId;
       player1.emit('c4_createRoom', { playerName: 'Alice' });
       player1.once('c4_roomInfo', (room) => {
-        roomId = room.id;
+        const roomId = room.id;
         player2.emit('c4_joinRoom', { roomId, playerName: 'Bob' });
-      });
-      player1.once('c4_roomInfo', () => {
-        player1.emit('c4_startGame', { roomId });
-      });
-      player1.once('c4_gameStarted', () => {
-        player1.emit('c4_makeMove', { roomId, column: 3 });
-      });
-      player1.once('c4_moveMade', (data) => {
-        expect(data.col).to.equal(3);
-        expect(data.row).to.equal(5);
-        done();
+        player1.once('c4_roomInfo', () => {
+          player1.emit('c4_startGame', { roomId });
+          player1.once('c4_gameStarted', () => {
+            player1.emit('c4_makeMove', { roomId, column: 3 });
+          });
+          player1.once('c4_moveMade', (data) => {
+            expect(data.col).to.equal(3);
+            expect(data.row).to.equal(5);
+            done();
+          });
+        });
       });
     });
 
     it('should alternate turns', (done) => {
-      let roomId;
       player1.emit('c4_createRoom', { playerName: 'Alice' });
       player1.once('c4_roomInfo', (room) => {
-        roomId = room.id;
+        const roomId = room.id;
         player2.emit('c4_joinRoom', { roomId, playerName: 'Bob' });
-      });
-      player1.once('c4_roomInfo', () => {
-        player1.emit('c4_startGame', { roomId });
-      });
-      player1.once('c4_gameStarted', () => {
-        player1.emit('c4_makeMove', { roomId, column: 0 });
-      });
-      let moveCount = 0;
-      player1.on('c4_moveMade', (data) => {
-        moveCount++;
-        if (moveCount === 2) {
-          expect(data.playerIndex).to.equal(1);
-          done();
-        }
+        player1.once('c4_roomInfo', () => {
+          player1.emit('c4_startGame', { roomId });
+          player1.once('c4_gameStarted', () => {
+            player1.emit('c4_makeMove', { roomId, column: 0 });
+          });
+          let moveCount = 0;
+          player1.on('c4_moveMade', (data) => {
+            moveCount++;
+            if (moveCount === 1) {
+              expect(data.playerIndex).to.equal(0);
+              player2.emit('c4_makeMove', { roomId, column: 1 });
+            }
+            if (moveCount === 2) {
+              expect(data.playerIndex).to.equal(1);
+              done();
+            }
+          });
+        });
       });
     });
   });

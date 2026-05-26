@@ -168,6 +168,7 @@ class Connect4Manager extends BaseManager {
     const sanitizedRoomId = this.sanitizeRoomId(roomId);
     const room = this.rooms.get(sanitizedRoomId);
     if (!room || room.creator !== socket.id) return;
+    if (room.players.length < 2) return;
 
     room.gameState = 'playing';
     room.currentTurn = 0;
