@@ -14,6 +14,7 @@ const SOSGame = () => {
   const [gameState, setGameState] = useState('lobby');
   const [room, setRoom] = useState(null);
   const [selectedSymbol, setSelectedSymbol] = useState('S');
+  const [flashCells, setFlashCells] = useState([]);
 
   useEffect(() => {
     const saved = sessionStorage.getItem('sos_reconnect');
@@ -28,6 +29,9 @@ const SOSGame = () => {
 
     socket.on('sos_roomInfo', (data) => {
       setRoom(data);
+      if (data.gameState === 'playing') {
+        setGameState('playing');
+      }
       sessionStorage.setItem(
         'sos_reconnect',
         JSON.stringify({
@@ -43,6 +47,11 @@ const SOSGame = () => {
 
     socket.on('sos_moveMade', (data) => {
       setRoom((prev) => ({ ...prev, ...data }));
+      if (data.patterns && data.patterns.length > 0) {
+        const cells = data.patterns.flatMap((p) => p.cells.map((c) => `${c.row}-${c.col}`));
+        setFlashCells(cells);
+        setTimeout(() => setFlashCells([]), 2000);
+      }
     });
 
     socket.on('sos_gameOver', (_data) => {
@@ -109,11 +118,9 @@ const SOSGame = () => {
 
   const handleCellClick = (row, col) => {
     if (!room || gameState !== 'playing') return;
-    const currentPlayer = room.players.find((p) => p.id === room.currentTurn);
-    if (currentPlayer?.name !== playerName && !room.spectators?.find((s) => s.name === playerName)) return;
-
-    const myPlayer = room.players.find((p) => p.name === playerName && p.connected);
-    if (!myPlayer || myPlayer.id !== room.currentTurn) return;
+    const myPlayerIndex = room.players.findIndex((p) => p.name === playerName);
+    if (myPlayerIndex === -1 && !room.spectators?.find((s) => s.name === playerName)) return;
+    if (myPlayerIndex !== room.currentTurn) return;
     if (room.board[row][col] !== null) return;
 
     socket.emit('sos_makeMove', { roomId: room.id, row, col, value: selectedSymbol });
@@ -161,6 +168,9 @@ const SOSGame = () => {
             </div>
           )}
           <TurnIndicator players={room.players} currentTurn={room.currentTurn} scores={room.scores} />
+          <div className="paper-font text-sm text-ink/60">
+            Moves: {room.moveCount} / {room.size * room.size}
+          </div>
           <div
             className="grid gap-1 p-4 sketch-card"
             style={{
@@ -168,19 +178,21 @@ const SOSGame = () => {
             }}
           >
             {room.board.map((row, r) =>
-              row.map((cell, c) => (
-                <button
-                  key={`${r}-${c}`}
-                  onClick={() => handleCellClick(r, c)}
-                  disabled={
-                    !room.players.find((p) => p.name === playerName)?.id ||
-                    room.currentTurn !== room.players.find((p) => p.name === playerName)?.id
-                  }
-                  className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center text-2xl font-sketch border-2 border-ink/20 hover:bg-paper-dark rounded sketch-transition"
-                >
-                  {cell && <span className={cell.value === 'S' ? 'text-red-600' : 'text-blue-600'}>{cell.value}</span>}
-                </button>
-              )),
+              row.map((cell, c) => {
+                const isFlashing = flashCells.includes(`${r}-${c}`);
+                return (
+                  <button
+                    key={`${r}-${c}`}
+                    onClick={() => handleCellClick(r, c)}
+                    disabled={room.currentTurn !== room.players.findIndex((p) => p.name === playerName)}
+                    className={`w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center text-2xl font-sketch border-2 border-ink/20 hover:bg-paper-dark rounded sketch-transition ${
+                      isFlashing ? 'bg-yellow-200' : ''
+                    }`}
+                  >
+                    {cell && <span className={cell.player === 0 ? 'text-red-600' : 'text-blue-600'}>{cell.value}</span>}
+                  </button>
+                );
+              }),
             )}
           </div>
 

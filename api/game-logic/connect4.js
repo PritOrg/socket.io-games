@@ -35,6 +35,7 @@ class Connect4Manager extends BaseManager {
       currentTurn: null,
       winner: null,
       lastMove: null,
+      moveCount: 0,
     };
 
     this.rooms.set(roomId, room);
@@ -186,6 +187,7 @@ class Connect4Manager extends BaseManager {
     room.currentTurn = null;
     room.winner = null;
     room.lastMove = null;
+    room.moveCount = 0;
 
     this.io.to(room.id).emit(`${this.gamePrefix}_gameRestarted`);
     this.sendRoomInfo(sanitizedRoomId);
@@ -211,10 +213,18 @@ class Connect4Manager extends BaseManager {
       }
     }
 
-    if (row === -1) return;
+    if (row === -1) {
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'warning',
+        title: 'Column Full',
+        text: 'This column is full. Choose another column.',
+      });
+      return;
+    }
 
     room.board[row][col] = playerIndex;
     room.lastMove = { row, col };
+    room.moveCount += 1;
 
     const winLine = this.checkWin(room, row, col);
     if (winLine) {
@@ -224,6 +234,7 @@ class Connect4Manager extends BaseManager {
         winner: room.winner,
         winLine,
         board: room.board,
+        moveCount: room.moveCount,
       });
     } else if (this.checkDraw(room)) {
       room.gameState = 'ended';
@@ -231,6 +242,7 @@ class Connect4Manager extends BaseManager {
         winner: null,
         winLine: null,
         board: room.board,
+        moveCount: room.moveCount,
       });
     } else {
       room.currentTurn = room.currentTurn === 0 ? 1 : 0;
@@ -240,6 +252,7 @@ class Connect4Manager extends BaseManager {
         playerIndex,
         board: room.board,
         currentTurn: room.currentTurn,
+        moveCount: room.moveCount,
       });
       this.sendRoomInfo(room.id);
     }

@@ -39,6 +39,8 @@ class SOSManager extends BaseManager {
       scores: { 0: 0, 1: 0 },
       currentTurn: null,
       formedPatterns: [],
+      moveCount: 0,
+      latestPattern: null,
     };
 
     this.rooms.set(roomId, room);
@@ -187,6 +189,8 @@ class SOSManager extends BaseManager {
     room.scores = { 0: 0, 1: 0 };
     room.currentTurn = null;
     room.formedPatterns = [];
+    room.moveCount = 0;
+    room.latestPattern = null;
 
     this.io.to(room.id).emit(`${this.gamePrefix}_gameRestarted`);
     this.sendRoomInfo(sanitizedRoomId);
@@ -214,6 +218,7 @@ class SOSManager extends BaseManager {
     if (!['S', 'O'].includes(value)) return;
 
     room.board[row][col] = { player: playerIndex, value };
+    room.moveCount += 1;
 
     const patterns = this.detectSOS(room, row, col);
     patterns.forEach((pattern) => {
@@ -221,8 +226,15 @@ class SOSManager extends BaseManager {
       room.formedPatterns.push({ ...pattern, player: playerIndex });
     });
 
+    room.latestPattern = patterns.length > 0 ? { ...patterns[0], player: playerIndex } : null;
+
     if (patterns.length > 0) {
       // Extra turn on scoring
+      this.io.to(room.id).emit(`${this.gamePrefix}_scoreFlash`, {
+        playerIndex,
+        patternCount: patterns.length,
+        patterns,
+      });
       this.io.to(room.id).emit(`${this.gamePrefix}_moveMade`, {
         row,
         col,
@@ -231,9 +243,12 @@ class SOSManager extends BaseManager {
         patterns,
         scores: { ...room.scores },
         currentTurn: room.currentTurn,
+        moveCount: room.moveCount,
+        totalCells: room.size * room.size,
       });
     } else {
       room.currentTurn = room.currentTurn === 0 ? 1 : 0;
+      room.latestPattern = null;
       this.io.to(room.id).emit(`${this.gamePrefix}_moveMade`, {
         row,
         col,
@@ -242,6 +257,8 @@ class SOSManager extends BaseManager {
         patterns: [],
         scores: { ...room.scores },
         currentTurn: room.currentTurn,
+        moveCount: room.moveCount,
+        totalCells: room.size * room.size,
       });
     }
 
@@ -255,25 +272,27 @@ class SOSManager extends BaseManager {
   detectSOS(room, row, col) {
     const patterns = [];
     const size = room.size;
-    const dirs = [
+    const placedValue = room.board[row][col].value;
+
+    const directions = [
       [0, 1],
       [1, 1],
       [1, 0],
       [1, -1],
     ];
 
-    for (const [dr, dc] of dirs) {
-      for (let dir of [-1, 1]) {
-        const r1 = row + dr * dir;
-        const c1 = col + dc * dir;
-        const r2 = row - dr * dir;
-        const c2 = col - dc * dir;
+    for (const [dr, dc] of directions) {
+      for (const sign of [-1, 1]) {
+        const r1 = row + dr * sign;
+        const c1 = col + dc * sign;
+        const r2 = row - dr * sign;
+        const c2 = col - dc * sign;
 
         if (r1 >= 0 && r1 < size && c1 >= 0 && c1 < size && r2 >= 0 && r2 < size && c2 >= 0 && c2 < size) {
           const cell1 = room.board[r1][c1];
           const cell2 = room.board[r2][c2];
           if (cell1 && cell2) {
-            const values = [cell1.value, room.board[row][col].value, cell2.value];
+            const values = [cell1.value, placedValue, cell2.value];
             if (values[0] === 'S' && values[1] === 'O' && values[2] === 'S') {
               patterns.push({
                 cells: [

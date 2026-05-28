@@ -98,15 +98,6 @@ const Connect4Icon = () => (
   </svg>
 );
 
-const ComingSoonIcon = () => (
-  <svg viewBox="0 0 48 48" className="w-full h-full" fill="none" stroke="currentColor" strokeWidth="1.5">
-    <circle cx="24" cy="24" r="20" strokeDasharray="6 4" />
-    <text x="24" y="28" textAnchor="middle" className="text-xs font-bold" fill="currentColor">
-      ?
-    </text>
-  </svg>
-);
-
 const GameCard = ({ title, description, onClick, icon: Icon, accentColor, badge }) => (
   <div onClick={onClick} className="group relative cursor-pointer transition-all duration-300 hover:-translate-y-1">
     <div className="absolute -inset-1 bg-gradient-to-r from-transparent via-gray-300 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />

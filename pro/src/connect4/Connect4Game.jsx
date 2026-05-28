@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useGameContext } from '../context/GameContext';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import GameLayout from '../components/ui/GameLayout';
 import RoomLobby from '../components/ui/RoomLobby';
 import MatchReport from '../components/ui/MatchReport';
@@ -15,6 +14,7 @@ const Connect4Game = () => {
   const [gameState, setGameState] = useState('lobby');
   const [room, setRoom] = useState(null);
   const [hoverCol, setHoverCol] = useState(null);
+  const [winLine, setWinLine] = useState(null);
 
   useEffect(() => {
     const saved = sessionStorage.getItem('c4_reconnect');
@@ -29,6 +29,9 @@ const Connect4Game = () => {
 
     socket.on('c4_roomInfo', (data) => {
       setRoom(data);
+      if (data.gameState === 'playing') {
+        setGameState('playing');
+      }
       sessionStorage.setItem(
         'c4_reconnect',
         JSON.stringify({
@@ -46,8 +49,11 @@ const Connect4Game = () => {
       setRoom((prev) => ({ ...prev, ...data }));
     });
 
-    socket.on('c4_gameOver', (_data) => {
+    socket.on('c4_gameOver', (data) => {
       setGameState('ended');
+      if (data.winLine) {
+        setWinLine(data.winLine.map((c) => `${c.row}-${c.col}`));
+      }
     });
 
     socket.on('c4_gamePaused', () => {
@@ -56,6 +62,7 @@ const Connect4Game = () => {
 
     socket.on('c4_gameRestarted', () => {
       setGameState('lobby');
+      setWinLine(null);
     });
 
     socket.on('c4_alert', ({ icon, title, text }) => {
@@ -109,8 +116,8 @@ const Connect4Game = () => {
 
   const handleColumnClick = (col) => {
     if (!room || gameState !== 'playing') return;
-    const myPlayer = room.players.find((p) => p.name === playerName);
-    if (!myPlayer || myPlayer.id !== room.currentTurn) return;
+    const myPlayerIndex = room.players.findIndex((p) => p.name === playerName);
+    if (!room.players[myPlayerIndex] || myPlayerIndex !== room.currentTurn) return;
 
     socket.emit('c4_makeMove', { roomId: room.id, column: col });
   };
@@ -154,59 +161,46 @@ const Connect4Game = () => {
 
           <TurnIndicator players={room.players} currentTurn={room.currentTurn} />
 
-          <div className="grid grid-cols-7 gap-1 p-4 sketch-card bg-blue-50" onMouseLeave={() => setHoverCol(null)}>
-            {Array(7)
-              .fill(null)
-              .map((_, col) => (
-                <div
-                  key={col}
-                  className="w-10 h-10 sm:w-12 sm:h-12 cursor-pointer flex items-center justify-center"
-                  onClick={() => canPlay && handleColumnClick(col)}
-                  onMouseEnter={() => canPlay && setHoverCol(col)}
-                >
-                  {hoverCol === col && canPlay && (
-                    <div
-                      className={`w-8 h-8 rounded-full opacity-50 ${
-                        room.currentTurn === 0 ? 'bg-red-500' : 'bg-yellow-500'
-                      }`}
-                    />
-                  )}
-                </div>
-              ))}
-
-            <AnimatePresence>
-              {room.board.map((row, r) =>
-                row.map((cell, c) => {
-                  if (cell === null) return null;
-                  return (
-                    <motion.div
-                      key={`disc-${r}-${c}`}
-                      initial={{ y: -100, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      exit={{ y: 100, opacity: 0 }}
-                      transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                      className={`absolute w-10 h-10 sm:w-12 sm:h-12 rounded-full ${
-                        cell === 0 ? 'bg-red-500' : 'bg-yellow-500'
-                      }`}
-                      style={{
-                        gridRow: r + 1,
-                        gridColumn: c + 1,
-                      }}
-                    />
-                  );
-                }),
-              )}
-            </AnimatePresence>
+          <div
+            className="grid grid-cols-7 gap-1 p-4 sketch-card bg-blue-50 relative"
+            style={{ width: 'fit-content' }}
+            onMouseLeave={() => setHoverCol(null)}
+          >
+            {room.board.map((row, r) =>
+              row.map((cell, c) => {
+                const isWinning = winLine && winLine.includes(`${r}-${c}`);
+                return (
+                  <div
+                    key={`${r}-${c}`}
+                    className={`w-10 h-10 sm:w-12 sm:h-12 border-2 rounded-full flex items-center justify-center ${
+                      isWinning ? 'border-yellow-400' : 'border-ink/20'
+                    }`}
+                  >
+                    {cell !== null && (
+                      <div className={`w-8 h-8 rounded-full ${cell === 0 ? 'bg-red-500' : 'bg-yellow-500'}`} />
+                    )}
+                  </div>
+                );
+              }),
+            )}
           </div>
 
-          <div className="grid grid-cols-7 gap-1 w-64 sm:w-72">
+          <div className="grid grid-cols-7 gap-1 w-64 sm:w-72 relative" onMouseLeave={() => setHoverCol(null)}>
             {room.board[0].map((_, col) => (
               <button
                 key={col}
                 onClick={() => canPlay && handleColumnClick(col)}
                 disabled={!canPlay}
-                className="py-2 text-2xl font-sketch hover:bg-paper-dark rounded sketch-transition"
+                className="py-2 text-2xl font-sketch hover:bg-paper-dark rounded sketch-transition relative"
+                onMouseEnter={() => canPlay && setHoverCol(col)}
               >
+                {hoverCol === col && (
+                  <div
+                    className={`absolute inset-0 flex items-center justify-center pointer-events-none ${
+                      room.currentTurn === 0 ? 'bg-red-500/30' : 'bg-yellow-500/30'
+                    } rounded-full`}
+                  />
+                )}
                 ⬇️
               </button>
             ))}

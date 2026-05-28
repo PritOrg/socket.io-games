@@ -16,7 +16,13 @@ const app = express();
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map((s) => s.trim())
-  : ['http://localhost:5173', 'http://localhost:4000'];
+  : [
+      'http://localhost:5173',
+      'http://localhost:4000',
+      'http://10.0.15.194:5173',
+      'http://10.42.0.0:5173',
+      'http://10.42.0.1:5173',
+    ];
 
 const corsOptions = {
   origin: (origin, callback) => {
@@ -49,9 +55,7 @@ app.use((req, res, next) => {
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: process.env.ALLOWED_ORIGINS
-      ? process.env.ALLOWED_ORIGINS.split(',').map((s) => s.trim())
-      : ['http://localhost:5173', 'http://localhost:4000'],
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
   },
 });

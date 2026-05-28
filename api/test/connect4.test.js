@@ -143,4 +143,141 @@ describe('Connect4 Game Logic', function () {
       });
     });
   });
+
+  describe('Win Detection - Vertical', () => {
+    it('should detect vertical win', (done) => {
+      player1.emit('c4_createRoom', { playerName: 'Alice' });
+      player1.once('c4_roomInfo', (room) => {
+        const roomId = room.id;
+        player2.emit('c4_joinRoom', { roomId, playerName: 'Bob' });
+        player1.once('c4_roomInfo', () => {
+          player1.emit('c4_startGame', { roomId });
+          player1.once('c4_gameStarted', () => {
+            for (let i = 0; i < 4; i++) {
+              player1.emit('c4_makeMove', { roomId, column: 0 });
+              player2.emit('c4_makeMove', { roomId, column: 1 });
+            }
+          });
+          player1.once('c4_gameOver', (data) => {
+            expect(data.winner).to.equal(player1.id);
+            expect(data.winLine).to.be.an('array');
+            expect(data.winLine).to.have.lengthOf(4);
+            done();
+          });
+        });
+      });
+    });
+  });
+
+  describe('Win Detection - Horizontal', () => {
+    it('should detect horizontal win', (done) => {
+      player1.emit('c4_createRoom', { playerName: 'Alice' });
+      player1.once('c4_roomInfo', (room) => {
+        const roomId = room.id;
+        player2.emit('c4_joinRoom', { roomId, playerName: 'Bob' });
+        player1.once('c4_roomInfo', () => {
+          player1.emit('c4_startGame', { roomId });
+          player1.once('c4_gameStarted', () => {
+            player1.emit('c4_makeMove', { roomId, column: 0 });
+            player2.emit('c4_makeMove', { roomId, column: 0 });
+            player1.emit('c4_makeMove', { roomId, column: 1 });
+            player2.emit('c4_makeMove', { roomId, column: 1 });
+            player1.emit('c4_makeMove', { roomId, column: 2 });
+            player2.emit('c4_makeMove', { roomId, column: 2 });
+            player1.emit('c4_makeMove', { roomId, column: 3 });
+          });
+          player1.once('c4_gameOver', (data) => {
+            expect(data.winner).to.equal(player1.id);
+            expect(data.winLine).to.be.an('array');
+            done();
+          });
+        });
+      });
+    });
+  });
+
+  describe('Draw Detection', () => {
+    it('should detect draw when board is full with no winner', (done) => {
+      player1.emit('c4_createRoom', { playerName: 'Alice' });
+      player1.once('c4_roomInfo', (room) => {
+        const roomId = room.id;
+        player2.emit('c4_joinRoom', { roomId, playerName: 'Bob' });
+        player1.once('c4_roomInfo', () => {
+          player1.emit('c4_startGame', { roomId });
+          player1.once('c4_gameStarted', () => {
+            let moves = 0;
+            const columns = [0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6];
+            columns.forEach((col, i) => {
+              setTimeout(() => {
+                const player = i % 2 === 0 ? player1 : player2;
+                player.emit('c4_makeMove', { roomId, column: col });
+              }, i * 20);
+            });
+          });
+          player1.once('c4_gameOver', (data) => {
+            expect(data.winner).to.be.null;
+            done();
+          });
+        });
+      });
+    });
+  });
+
+  describe('Column Full Rejection', () => {
+    it('should reject move in full column', (done) => {
+      let timeout = setTimeout(() => done(new Error('timeout')), 2000);
+      player1.emit('c4_createRoom', { playerName: 'Alice' });
+      player1.once('c4_roomInfo', (room) => {
+        const roomId = room.id;
+        player2.emit('c4_joinRoom', { roomId, playerName: 'Bob' });
+        player1.once('c4_roomInfo', () => {
+          player1.emit('c4_startGame', { roomId });
+          player1.once('c4_gameStarted', () => {
+            for (let i = 0; i < 6; i++) {
+              player1.emit('c4_makeMove', { roomId, column: 0 });
+              player2.emit('c4_makeMove', { roomId, column: 1 });
+            }
+          });
+          player1.once('c4_moveMade', () => {
+            clearTimeout(timeout);
+            player1.emit('c4_makeMove', { roomId, column: 0 });
+            timeout = setTimeout(() => done(new Error('timeout')), 1000);
+          });
+          player1.once('c4_alert', (alert) => {
+            clearTimeout(timeout);
+            expect(alert.text).to.include('full');
+            done();
+          });
+        });
+      });
+    });
+
+    it('should emit c4_columnFull alert on full column click', (done) => {
+      let timeout = setTimeout(() => done(new Error('timeout')), 2000);
+      player1.emit('c4_createRoom', { playerName: 'Alice' });
+      player1.once('c4_roomInfo', (room) => {
+        const roomId = room.id;
+        player2.emit('c4_joinRoom', { roomId, playerName: 'Bob' });
+        player1.once('c4_roomInfo', () => {
+          player1.emit('c4_startGame', { roomId });
+          player1.once('c4_gameStarted', () => {
+            for (let i = 0; i < 6; i++) {
+              player1.emit('c4_makeMove', { roomId, column: 3 });
+              player2.emit('c4_makeMove', { roomId, column: 2 });
+            }
+          });
+          player1.once('c4_moveMade', () => {
+            clearTimeout(timeout);
+            player1.emit('c4_makeMove', { roomId, column: 3 });
+            timeout = setTimeout(() => done(new Error('timeout')), 1000);
+          });
+          player1.once('c4_alert', (alert) => {
+            clearTimeout(timeout);
+            expect(alert.text).to.include('full');
+            done();
+          });
+        });
+      });
+    });
+  });
 });

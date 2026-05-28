@@ -157,4 +157,117 @@ describe('SOS Game Logic', function () {
       });
     });
   });
+
+  describe('SOS Pattern Detection', () => {
+    it('should detect SOS pattern when placing O completes it', (done) => {
+      player1.emit('sos_createRoom', { playerName: 'Alice', size: 6 });
+      player1.once('sos_roomInfo', (room) => {
+        const roomId = room.id;
+        player2.emit('sos_joinRoom', { roomId, playerName: 'Bob' });
+        player1.once('sos_roomInfo', () => {
+          player1.emit('sos_startGame', { roomId });
+          player1.once('sos_gameStarted', () => {
+            // Player1 places S at (0,0) - turn goes to player2
+            player1.emit('sos_makeMove', { roomId, row: 0, col: 0, value: 'S' });
+          });
+          player1.once('sos_moveMade', () => {
+            // Player2 places S at (0,2) - turn goes to player1
+            player2.emit('sos_makeMove', { roomId, row: 0, col: 2, value: 'S' });
+          });
+          player2.once('sos_moveMade', () => {
+            // Player1 places O at (0,1) - this completes S-O-S pattern
+            player1.once('sos_moveMade', (data) => {
+              expect(data.patterns).to.be.an('array');
+              expect(data.patterns.length).to.be.at.least(1);
+              expect(data.patterns[0].cells).to.have.lengthOf(3);
+              done();
+            });
+            player1.emit('sos_makeMove', { roomId, row: 0, col: 1, value: 'O' });
+          });
+        });
+      });
+    });
+  });
+
+  describe('Score Increment', () => {
+    it('should increment score when SOS is formed', (done) => {
+      player1.emit('sos_createRoom', { playerName: 'Alice', size: 6 });
+      player1.once('sos_roomInfo', (room) => {
+        const roomId = room.id;
+        player2.emit('sos_joinRoom', { roomId, playerName: 'Bob' });
+        player1.once('sos_roomInfo', () => {
+          player1.emit('sos_startGame', { roomId });
+          player1.once('sos_gameStarted', () => {
+            player1.emit('sos_makeMove', { roomId, row: 0, col: 0, value: 'S' });
+          });
+          player1.once('sos_moveMade', () => {
+            player2.emit('sos_makeMove', { roomId, row: 0, col: 2, value: 'S' });
+          });
+          player2.once('sos_moveMade', () => {
+            player1.once('sos_moveMade', (data) => {
+              expect(data.scores[0]).to.be.at.least(1);
+              done();
+            });
+            player1.emit('sos_makeMove', { roomId, row: 0, col: 1, value: 'O' });
+          });
+        });
+      });
+    });
+  });
+
+  describe('Extra Turn on Score', () => {
+    it('should keep turn when player scores', (done) => {
+      player1.emit('sos_createRoom', { playerName: 'Alice', size: 6 });
+      player1.once('sos_roomInfo', (room) => {
+        const roomId = room.id;
+        player2.emit('sos_joinRoom', { roomId, playerName: 'Bob' });
+        player1.once('sos_roomInfo', () => {
+          player1.emit('sos_startGame', { roomId });
+          player1.once('sos_gameStarted', () => {
+            player1.emit('sos_makeMove', { roomId, row: 0, col: 0, value: 'S' });
+          });
+          player1.once('sos_moveMade', () => {
+            player2.emit('sos_makeMove', { roomId, row: 0, col: 2, value: 'S' });
+          });
+          player2.once('sos_moveMade', () => {
+            player1.once('sos_moveMade', (data) => {
+              expect(data.currentTurn).to.equal(0);
+              done();
+            });
+            player1.emit('sos_makeMove', { roomId, row: 0, col: 1, value: 'O' });
+          });
+        });
+      });
+    });
+  });
+
+  describe('Game Over', () => {
+    it('should emit gameOver when board is full', (done) => {
+      player1.emit('sos_createRoom', { playerName: 'Alice', size: 3 });
+      player1.once('sos_roomInfo', (room) => {
+        const roomId = room.id;
+        player2.emit('sos_joinRoom', { roomId, playerName: 'Bob' });
+        player1.once('sos_roomInfo', () => {
+          player1.emit('sos_startGame', { roomId });
+          player1.once('sos_gameStarted', () => {
+            player1.once('sos_gameOver', (data) => {
+              expect(data).to.have.property('winner');
+              expect(data).to.have.property('scores');
+              done();
+            });
+            // Fill board with alternating moves - no SOS patterns possible
+            setTimeout(() => player1.emit('sos_makeMove', { roomId, row: 0, col: 0, value: 'S' }), 0);
+            setTimeout(() => player2.emit('sos_makeMove', { roomId, row: 0, col: 1, value: 'S' }), 20);
+            setTimeout(() => player1.emit('sos_makeMove', { roomId, row: 0, col: 2, value: 'S' }), 40);
+            setTimeout(() => player2.emit('sos_makeMove', { roomId, row: 1, col: 0, value: 'O' }), 60);
+            setTimeout(() => player1.emit('sos_makeMove', { roomId, row: 1, col: 1, value: 'S' }), 80);
+            setTimeout(() => player2.emit('sos_makeMove', { roomId, row: 1, col: 2, value: 'O' }), 100);
+            setTimeout(() => player1.emit('sos_makeMove', { roomId, row: 2, col: 0, value: 'O' }), 120);
+            setTimeout(() => player2.emit('sos_makeMove', { roomId, row: 2, col: 1, value: 'O' }), 140);
+            setTimeout(() => player1.emit('sos_makeMove', { roomId, row: 2, col: 2, value: 'O' }), 160);
+          });
+        });
+      });
+    });
+  });
 });
