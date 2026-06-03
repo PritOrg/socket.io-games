@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useGameContext } from '../context/GameContext';
-import { SketchButton, SketchCard, sketchPopupClass, GameLayout } from '../components/ui';
+import {
+  SketchButton,
+  SketchCard,
+  sketchPopupClass,
+  GameLayout,
+  AvatarSelector,
+  ScoreBoard,
+  AvatarReactionBar,
+} from '../components/ui';
 import useSound from 'use-sound';
 import confetti from 'canvas-confetti';
 import Swal from 'sweetalert2';
@@ -12,7 +20,7 @@ import logger from '../utils/logger';
 const PLAYER_COLORS = ['#1a1a2e', '#c73e1d'];
 
 const UTTTGame = () => {
-  const { socket, playerName, roomId, setRoomId, clearRoomId } = useGameContext();
+  const { socket, playerName, roomId, setRoomId, clearRoomId, profile, setProfile } = useGameContext();
   const [players, setPlayers] = useState([]);
   const [currentTurn, setCurrentTurn] = useState(null);
   const [gameState, setGameState] = useState('waiting');
@@ -228,7 +236,7 @@ const UTTTGame = () => {
       socket.off('uttt_gamePaused');
       socket.off('uttt_alert');
     };
-  }, [socket, players, setRoomId, playWin]);
+  }, [socket, setRoomId, playWin, roomId, players]);
 
   const handleCellClick = (gridIndex, squareIndex) => {
     if (gameState === 'playing' && currentTurn === socket?.id) {
@@ -242,8 +250,12 @@ const UTTTGame = () => {
   };
 
   const handleCreateRoom = () => {
-    logger.socket('➡️', 'uttt_createRoom', { playerName });
-    socket.emit('uttt_createRoom', playerName);
+    logger.socket('➡️', 'uttt_createRoom', { playerName: profile.name });
+    socket.emit('uttt_createRoom', {
+      playerName: profile.name,
+      avatarIcon: profile.avatarIcon,
+      color: profile.color,
+    });
   };
 
   const handleJoinRoom = async () => {
@@ -257,11 +269,15 @@ const UTTTGame = () => {
     if (joinRoomId) {
       logger.socket('➡️', 'uttt_joinRoom', {
         roomId: joinRoomId.toUpperCase(),
-        playerName,
+        playerName: profile.name || playerName,
+        avatarIcon: profile.avatarIcon,
+        color: profile.color,
       });
       socket.emit('uttt_joinRoom', {
         roomId: joinRoomId.toUpperCase(),
-        playerName,
+        playerName: profile.name || playerName,
+        avatarIcon: profile.avatarIcon,
+        color: profile.color,
       });
     }
   };
@@ -311,7 +327,22 @@ const UTTTGame = () => {
               <h2 className="font-sketch text-xl sm:text-2xl text-ink mb-2">Ready to Play?</h2>
               <p className="font-handwriting text-sm text-gray-600">Create a new game or join an existing one</p>
             </div>
-            <div className="flex gap-3 sm:gap-4 flex-col sm:flex-row">
+
+            <input
+              type="text"
+              value={profile.name}
+              onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+              placeholder="Enter your name"
+              className="w-full sketch-border font-handwriting text-ink px-3 py-2 rounded mb-4"
+            />
+            <AvatarSelector
+              avatarIcon={profile.avatarIcon}
+              color={profile.color}
+              onAvatarChange={(icon) => setProfile({ ...profile, avatarIcon: icon })}
+              onColorChange={(c) => setProfile({ ...profile, color: c })}
+            />
+
+            <div className="flex gap-3 sm:gap-4 flex-col sm:flex-row mt-4">
               <SketchButton
                 onClick={handleCreateRoom}
                 className="text-sm sm:text-base px-4 sm:px-6 py-2 sm:py-3 flex-1"
@@ -393,6 +424,18 @@ const UTTTGame = () => {
               />
             </div>
 
+            {/* ScoreBoard */}
+            <div className="mb-4">
+              <ScoreBoard
+                players={players}
+                scores={{ X: scores.X || 0, O: scores.O || 0 }}
+                currentTurn={currentTurn}
+                myPlayerIndex={myPlayerIndex}
+                lastMove={lastMove}
+                orientation="horizontal"
+              />
+            </div>
+
             {/* Game Status */}
             <div className="text-center font-handwriting text-sm sm:text-lg text-ink flex flex-col items-center gap-3">
               {gameState === 'playing' ? (
@@ -445,6 +488,10 @@ const UTTTGame = () => {
           </div>
         )}
       </div>
+
+      {gameState === 'playing' && (
+        <AvatarReactionBar socket={socket} roomId={roomId} gamePrefix="uttt" players={players} />
+      )}
     </GameLayout>
   );
 };

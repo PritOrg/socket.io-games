@@ -23,6 +23,8 @@ vi.mock('../context/GameContext', () => ({
     playerName: 'TestPlayer',
     setPlayerName: vi.fn(),
     clearRoomId: vi.fn(),
+    profile: { name: 'TestPlayer', avatarIcon: 'cat', color: '#2a2a3e' },
+    setProfile: vi.fn(),
   }),
 }));
 

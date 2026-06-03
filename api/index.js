@@ -80,6 +80,10 @@ io.on('connection', (socket) => {
   sosManager.handleConnection(socket);
   connect4Manager.handleConnection(socket);
 
+  socket.on('game_reaction', ({ roomId, reaction, gamePrefix }) => {
+    socket.to(roomId).emit(`${gamePrefix}_reaction`, { playerId: socket.id, reaction, timestamp: Date.now() });
+  });
+
   socket.on('disconnect', (reason) => {
     logger.warn('SERVER', `User disconnected: ${socket.id}`, { reason });
   });

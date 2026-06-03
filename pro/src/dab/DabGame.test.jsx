@@ -129,8 +129,9 @@ describe('DabGame', () => {
   describe('Avatar Selector', () => {
     it('shows avatar picker in the lobby', () => {
       render(<DabGame />, { wrapper: Wrapper });
-      expect(screen.getByText('🐼')).toBeTruthy();
-      expect(screen.getByText('🦊')).toBeTruthy();
+      // Avatar selector shows icons in colored circles, not emojis anymore
+      const avatarButtons = screen.getAllByRole('button').filter((b) => b.querySelector('svg'));
+      expect(avatarButtons.length).toBeGreaterThan(0);
     });
   });
 

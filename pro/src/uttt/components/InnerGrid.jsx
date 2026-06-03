@@ -47,7 +47,6 @@ const InnerGrid = ({ _gridIndex, gridData, macroWinner, isActive, isLastMoveGrid
         {value && (
           <span className="relative">
             {value}
-            {/* Hand-drawn effect - slight rotation */}
             <span className="absolute inset-0 opacity-20" style={{ transform: 'rotate(2deg)' }}>
               {value}
             </span>
@@ -85,7 +84,6 @@ const InnerGrid = ({ _gridIndex, gridData, macroWinner, isActive, isLastMoveGrid
             >
               {macroWinner}
             </span>
-            {/* Sketch wobble effect */}
             <span
               className={`absolute inset-0 flex items-center justify-center text-2xl sm:text-3xl md:text-5xl lg:text-6xl font-sketch opacity-10 ${
                 macroWinner === 'X' ? 'text-[#1a1a2e]' : 'text-[#c73e1d]'
@@ -104,7 +102,6 @@ const InnerGrid = ({ _gridIndex, gridData, macroWinner, isActive, isLastMoveGrid
 
   const renderGridLines = () => (
     <>
-      {/* Horizontal lines with slight wobble */}
       <div
         className="absolute left-0 w-full h-px bg-gradient-to-r from-transparent via-gray-400/40 to-transparent"
         style={{
@@ -119,7 +116,6 @@ const InnerGrid = ({ _gridIndex, gridData, macroWinner, isActive, isLastMoveGrid
           boxShadow: '0 0.5px 0 rgba(0,0,0,0.05)',
         }}
       />
-      {/* Vertical lines with slight wobble */}
       <div
         className="absolute top-0 h-full w-px bg-gradient-to-b from-transparent via-gray-400/40 to-transparent"
         style={{
@@ -147,7 +143,6 @@ const InnerGrid = ({ _gridIndex, gridData, macroWinner, isActive, isLastMoveGrid
       </div>
       {renderOverlay()}
 
-      {/* Paper texture overlay */}
       <div
         className="absolute inset-0 pointer-events-none opacity-5 mix-blend-multiply"
         style={{

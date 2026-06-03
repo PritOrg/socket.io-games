@@ -8,9 +8,9 @@ class UTTTManager extends BaseManager {
   }
 
   handleConnection(socket) {
-    socket.on(`${this.gamePrefix}_createRoom`, (playerName) => {
-      logger.socket('IN', `${this.gamePrefix}_createRoom`, socket.id, { playerName });
-      this.createRoom(socket, playerName);
+    socket.on(`${this.gamePrefix}_createRoom`, (data) => {
+      logger.socket('IN', `${this.gamePrefix}_createRoom`, socket.id, data);
+      this.createRoom(socket, data);
     });
 
     socket.on(`${this.gamePrefix}_joinRoom`, (data) => {
@@ -92,12 +92,21 @@ class UTTTManager extends BaseManager {
     return null;
   }
 
-  createRoom(socket, playerName) {
+  createRoom(socket, data) {
+    const { playerName, avatarIcon, color } = typeof data === 'string' ? { playerName: data } : data;
     const roomId = this.generateRoomId();
     socket.join(roomId);
     const room = {
       id: roomId,
-      players: [{ id: socket.id, name: playerName, connected: true }],
+      players: [
+        {
+          id: socket.id,
+          name: this.sanitizePlayerName(playerName),
+          avatarIcon,
+          color,
+          connected: true,
+        },
+      ],
       symbols: { [socket.id]: 'X' },
       currentTurn: null,
       gameState: 'waiting',
@@ -116,7 +125,7 @@ class UTTTManager extends BaseManager {
     this.sendRoomInfo(roomId);
   }
 
-  joinRoom(socket, { roomId, playerName }) {
+  joinRoom(socket, { roomId, playerName, avatarIcon, color }) {
     const roomIdSanitized = this.sanitizeRoomId(roomId);
     const room = this.rooms.get(roomIdSanitized);
     if (!room) {
@@ -139,7 +148,13 @@ class UTTTManager extends BaseManager {
     }
 
     socket.join(room.id);
-    room.players.push({ id: socket.id, name: playerName, connected: true });
+    room.players.push({
+      id: socket.id,
+      name: playerName,
+      avatarIcon,
+      color,
+      connected: true,
+    });
     room.symbols[socket.id] = 'O';
     this._trackSocket(socket.id, room.id);
     room.gameState = 'playing';

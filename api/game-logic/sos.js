@@ -21,7 +21,7 @@ class SOSManager extends BaseManager {
     socket.on('disconnect', () => this.handleDisconnect(socket));
   }
 
-  createRoom(socket, { playerName, size }) {
+  createRoom(socket, { playerName, avatarIcon, color, size }) {
     const boardSize = Math.max(4, Math.min(8, size || 6));
     const roomId = this.generateRoomId();
     socket.join(roomId);
@@ -29,7 +29,15 @@ class SOSManager extends BaseManager {
     const room = {
       id: roomId,
       creator: socket.id,
-      players: [{ id: socket.id, name: this.sanitizePlayerName(playerName), connected: true }],
+      players: [
+        {
+          id: socket.id,
+          name: this.sanitizePlayerName(playerName),
+          avatarIcon,
+          color,
+          connected: true,
+        },
+      ],
       spectators: [],
       gameState: 'waiting',
       size: boardSize,
@@ -48,7 +56,7 @@ class SOSManager extends BaseManager {
     this.sendRoomInfo(roomId);
   }
 
-  joinRoom(socket, { roomId, playerName, asSpectator }) {
+  joinRoom(socket, { roomId, playerName, avatarIcon, color, asSpectator }) {
     const sanitizedRoomId = this.sanitizeRoomId(roomId);
     if (!sanitizedRoomId) {
       socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Error', text: 'Invalid room ID' });
@@ -66,7 +74,13 @@ class SOSManager extends BaseManager {
     const sanitizedName = this.sanitizePlayerName(playerName);
 
     if (asSpectator || room.players.length >= 2) {
-      room.spectators.push({ id: socket.id, name: sanitizedName, connected: true });
+      room.spectators.push({
+        id: socket.id,
+        name: sanitizedName,
+        avatarIcon,
+        color,
+        connected: true,
+      });
       this._trackSocket(socket.id, room.id);
       this.sendRoomInfo(room.id);
       return;
@@ -77,7 +91,13 @@ class SOSManager extends BaseManager {
       return;
     }
 
-    room.players.push({ id: socket.id, name: sanitizedName, connected: true });
+    room.players.push({
+      id: socket.id,
+      name: sanitizedName,
+      avatarIcon,
+      color,
+      connected: true,
+    });
     this._trackSocket(socket.id, room.id);
     this.sendRoomInfo(room.id);
   }

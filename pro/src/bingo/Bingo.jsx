@@ -1,17 +1,25 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useGameContext } from '../context/GameContext';
-import { SketchButton, SketchCard, sketchPopupClass, GameLayout } from '../components/ui';
+import {
+  SketchButton,
+  SketchCard,
+  sketchPopupClass,
+  GameLayout,
+  AvatarSelector,
+  AvatarReactionBar,
+} from '../components/ui';
 import useSound from 'use-sound';
 import confetti from 'canvas-confetti';
 import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
 import { Users, Trophy, SwatchBook, Timer } from 'lucide-react';
+import { PlayerAvatar } from '../components/ui/AvatarSelector';
 import logger from '../utils/logger';
 
 const PLAYER_COLORS = ['#2a2a3e', '#c73e1d', '#2d4a8f', '#2f5233'];
 
 const Bingo = () => {
-  const { socket, playerName, roomId, setRoomId, clearRoomId } = useGameContext();
+  const { socket, roomId, setRoomId, clearRoomId, profile, setProfile } = useGameContext();
   const [numbers, setNumbers] = useState(Array.from({ length: 25 }, (_, i) => i + 1));
   const [players, setPlayers] = useState([]);
   const [gameState, setGameState] = useState('waiting');
@@ -19,7 +27,6 @@ const Bingo = () => {
   const [isCreator, setIsCreator] = useState(false);
   const [strikedOut, setStrikedOut] = useState('');
   const [turnTimer, setTurnTimer] = useState(30);
-  const [, setMyPlayerIndex] = useState(-1);
   const navigate = useNavigate();
 
   const strikedNumbersRef = useRef([]);
@@ -83,9 +90,6 @@ const Bingo = () => {
       setGameState(gameState);
       setCurrentTurn(currentTurn);
       setIsCreator(creator === socket.id);
-
-      const playerIndex = players.findIndex((p) => p.id === socket.id);
-      setMyPlayerIndex(playerIndex);
 
       if (gameState === 'playing' && players.length > 0) {
         const me = players.find((p) => p.id === socket.id);
@@ -158,7 +162,7 @@ const Bingo = () => {
       });
     });
 
-    socket.on('bingo_numberMarked', ({ number: _number, nextTurn, strikedNumbers }) => {
+    socket.on('bingo_numberMarked', ({ number, nextTurn, strikedNumbers }) => {
       setNumbers((prev) => prev.map((n) => (strikedNumbers.includes(n) ? 'X' : typeof n === 'string' ? n : n)));
       setCurrentTurn(nextTurn);
       playPop();
@@ -175,10 +179,12 @@ const Bingo = () => {
 
     socket.on('bingo_playerWon', (winnerId) => {
       playWin();
+      const playerColor = players.find((p) => p.id === winnerId)?.color || '#2a2a3e';
       confetti({
         particleCount: 150,
         spread: 70,
         origin: { y: 0.6 },
+        colors: [playerColor],
       });
       const winnerName = players.find((p) => p.id === winnerId)?.name || 'Someone';
       Swal.fire({
@@ -201,7 +207,6 @@ const Bingo = () => {
     });
 
     socket.on('bingo_alert', ({ icon, title, text }) => {
-      // Auto-dismiss "Room Created" alerts that are informational
       if (title === 'Room Created') {
         Swal.fire({
           icon,
@@ -232,9 +237,8 @@ const Bingo = () => {
       socket.off('bingo_playerLeft');
       socket.off('bingo_gamePaused');
       socket.off('bingo_alert');
-      sessionStorage.removeItem('bingo_reconnect');
     };
-  }, [socket, roomId, playPop, playWin, playTurn, generateBoard]);
+  }, [socket, roomId, playPop, playWin, playTurn, generateBoard, players]);
 
   useEffect(() => {
     if (gameState !== 'playing' || numbers.length !== 25) return;
@@ -246,7 +250,7 @@ const Bingo = () => {
         socket.emit('bingo_achieved', roomId);
       }
     }
-  }, [numbers, gameState, strikedOut, roomId, socket, calculateBingoProgress]);
+  }, [socket, numbers, gameState, strikedOut, roomId, calculateBingoProgress]);
 
   const handleCellClick = (number) => {
     if (gameState !== 'playing') return;
@@ -257,7 +261,11 @@ const Bingo = () => {
   };
 
   const handleCreateRoom = () => {
-    socket.emit('bingo_createRoom', playerName);
+    socket.emit('bingo_createRoom', {
+      creatorName: profile.name,
+      avatarIcon: profile.avatarIcon,
+      color: profile.color,
+    });
   };
 
   const handleJoinRoom = async () => {
@@ -271,7 +279,9 @@ const Bingo = () => {
     if (joinRoomId) {
       socket.emit('bingo_joinRoom', {
         roomId: joinRoomId.toUpperCase(),
-        playerName,
+        playerName: profile.name,
+        avatarIcon: profile.avatarIcon,
+        color: profile.color,
       });
     }
   };
@@ -298,22 +308,10 @@ const Bingo = () => {
       customClass: { popup: sketchPopupClass },
     }).then((result) => {
       if (result.isConfirmed) {
-        Swal.fire({
-          title: 'Leaving...',
-          text: 'Are you absolutely sure?',
-          icon: 'warning',
-          showCancelButton: true,
-          confirmButtonText: 'Yes, leave now',
-          cancelButtonText: 'Stay',
-          customClass: { popup: sketchPopupClass },
-        }).then((confirmResult) => {
-          if (confirmResult.isConfirmed) {
-            socket.emit('bingo_leaveRoom', roomId);
-            sessionStorage.removeItem('bingo_reconnect');
-            clearRoomId(roomId);
-            navigate('/');
-          }
-        });
+        socket.emit('bingo_leaveRoom', roomId);
+        sessionStorage.removeItem('bingo_reconnect');
+        clearRoomId(roomId);
+        navigate('/');
       }
     });
   };
@@ -325,7 +323,20 @@ const Bingo = () => {
 
         {!roomId ? (
           <SketchCard className="p-8 max-w-md w-full">
-            <div className="flex gap-4">
+            <input
+              type="text"
+              value={profile.name}
+              onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+              placeholder="Enter your name"
+              className="w-full sketch-border font-handwriting text-ink px-3 py-2 rounded mb-4"
+            />
+            <AvatarSelector
+              avatarIcon={profile.avatarIcon}
+              color={profile.color}
+              onAvatarChange={(icon) => setProfile({ ...profile, avatarIcon: icon })}
+              onColorChange={(c) => setProfile({ ...profile, color: c })}
+            />
+            <div className="flex gap-4 mt-4">
               <SketchButton onClick={handleCreateRoom}>Create Room</SketchButton>
               <SketchButton onClick={handleJoinRoom}>Join Room</SketchButton>
             </div>
@@ -358,7 +369,7 @@ const Bingo = () => {
                     onClick={() => handleCellClick(n)}
                     disabled={typeof n === 'string' || gameState !== 'playing' || currentTurn !== socket?.id}
                     className={`text-xl md:text-3xl font-handwriting flex items-center justify-center transition-all duration-300 rounded-xl
-                    ${typeof n === 'string' ? 'bg-green-500 text-white rotate-12' : 'hover:bg-gray-100 cursor-pointer'}
+                    ${typeof n === 'string' ? 'bg-green-500 text-white rotate-12 animate-pulse' : 'hover:bg-gray-100 cursor-pointer'}
                     ${gameState === 'playing' && currentTurn === socket?.id && typeof n !== 'string' ? 'ring-2 ring-ink ring-offset-2' : ''}
                     sketch-border`}
                     style={{
@@ -384,18 +395,13 @@ const Bingo = () => {
                       key={p.id}
                       className={`flex items-center justify-between p-2 rounded-lg transition-all
                     ${p.id === currentTurn ? 'scale-105' : 'opacity-40'}`}
-                      style={{ color: PLAYER_COLORS[i % PLAYER_COLORS.length] }}
+                      style={{ color: p.color || PLAYER_COLORS[i % PLAYER_COLORS.length] }}
                     >
                       <div className="flex items-center gap-2">
-                        <div
-                          className={`w-2 h-2 rounded-full ${p.id === currentTurn ? 'animate-pulse' : ''}`}
-                          style={{
-                            backgroundColor: PLAYER_COLORS[i % PLAYER_COLORS.length],
-                          }}
-                        />
+                        <PlayerAvatar avatarIcon={p.avatarIcon} color={p.color} size={20} />
                         <span className="font-bold font-handwriting truncate flex-1">{p.name}</span>
-                        {p.id === socket?.id && <span className="text-xs text-gray-500">(You)</span>}
                       </div>
+                      {p.id === socket?.id && <span className="text-xs text-gray-500">(You)</span>}
                       {p.id === currentTurn && <Users size={16} className="text-ink animate-pulse" />}
                     </div>
                   ))}
@@ -407,7 +413,7 @@ const Bingo = () => {
                   onClick={handleStartGame}
                   className="w-full text-xl py-4 animate-pulse flex items-center justify-center gap-2 bg-green-50"
                 >
-                  🚀 Start Party!
+                  Start Party!
                 </SketchButton>
               )}
 
@@ -440,6 +446,10 @@ const Bingo = () => {
           </div>
         )}
       </div>
+
+      {gameState === 'playing' && (
+        <AvatarReactionBar socket={socket} roomId={roomId} gamePrefix="bingo" players={players} />
+      )}
     </GameLayout>
   );
 };

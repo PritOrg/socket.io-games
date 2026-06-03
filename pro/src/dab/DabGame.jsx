@@ -1,13 +1,20 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useGameContext } from '../context/GameContext';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
-import { SketchButton, SketchCard, sketchPopupClass, GameLayout, AvatarSelector, MatchReport } from '../components/ui';
+import {
+  SketchButton,
+  SketchCard,
+  sketchPopupClass,
+  GameLayout,
+  AvatarSelector,
+  AvatarReactionBar,
+} from '../components/ui';
 import useSound from 'use-sound';
 import confetti from 'canvas-confetti';
 import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, Trophy, SwatchBook, Plus, Minus, RotateCcw, Undo2 } from 'lucide-react';
-import logger from '../utils/logger';
+import { ArrowLeft, Users, Trophy, Plus, Minus, RotateCcw, Undo2 } from 'lucide-react';
+import { PlayerAvatar } from '../components/ui/AvatarSelector';
 
 const PLAYER_COLORS = ['#1a1a2e', '#c73e1d', '#2d4a8f', '#2f5233'];
 
@@ -34,7 +41,7 @@ const addWobble = (x1, y1, x2, y2, seed = 0) => {
 };
 
 const DabGame = () => {
-  const { socket, playerName, roomId, setRoomId, clearRoomId } = useGameContext();
+  const { socket, playerName, roomId, setRoomId, clearRoomId, profile, setProfile } = useGameContext();
   const navigate = useNavigate();
 
   const [players, setPlayers] = useState([]);
@@ -50,12 +57,10 @@ const DabGame = () => {
   const [mode, setMode] = useState('classic');
   const [customRows, setCustomRows] = useState(5);
   const [customCols, setCustomCols] = useState(5);
-  const [customPlayers] = useState(2);
+  const [customPlayers, setCustomPlayers] = useState(2);
   const [myPlayerIndex, setMyPlayerIndex] = useState(-1);
   const [isPaused, setIsPaused] = useState(false);
   const [redoRequest, setRedoRequest] = useState(null);
-  const [avatar, setAvatar] = useState('🐼');
-  const [avatarColor, setAvatarColor] = useState('#1a1a2e');
 
   const [playLine] = useSound('/sounds/move.mp3', { volume: 0.5 });
   const [playBox] = useSound('/sounds/win.mp3', { volume: 0.7 });
@@ -68,9 +73,9 @@ const DabGame = () => {
       customRows,
       customCols,
       customPlayers,
-      playerName,
+      playerName: profile.name || playerName,
     });
-  }, [mode, customRows, customCols, customPlayers, playerName, socket]);
+  }, [mode, customRows, customCols, customPlayers, playerName, socket, profile]);
 
   const handleJoinRoom = useCallback(async () => {
     const { value: joinRoomId } = await Swal.fire({
@@ -83,10 +88,10 @@ const DabGame = () => {
     if (joinRoomId) {
       socket.emit('dab_joinRoom', {
         roomId: joinRoomId.toUpperCase(),
-        playerName,
+        playerName: profile.name || playerName,
       });
     }
-  }, [socket, playerName]);
+  }, [socket, profile, playerName]);
 
   useEffect(() => {
     if (!socket) return;
@@ -179,8 +184,17 @@ const DabGame = () => {
           return copy;
         });
 
-        if (claimedBoxes.length > 0) {
+        if (claimedBoxes && claimedBoxes.length > 0) {
           playBox();
+          const playerColor = players[movePlayerIndex]?.color || PLAYER_COLORS[movePlayerIndex] || '#2a2a3e';
+          confetti({
+            particleCount: 25,
+            spread: 35,
+            origin: { y: 0.6 },
+            colors: [playerColor],
+            decay: 0.85,
+            gravity: 0.5,
+          });
           setBoxes((prev) => {
             const copy = prev.map((row) => [...row]);
             for (const box of claimedBoxes) {
@@ -195,7 +209,7 @@ const DabGame = () => {
       },
     );
 
-    socket.on('dab_gameOver', ({ winner, scores: finalScores, winners }) => {
+    socket.on('dab_gameOver', ({ winner, scores: finalScores }) => {
       setGameState('ended');
       setScores(finalScores);
       sessionStorage.removeItem('dab_reconnect');
@@ -256,7 +270,7 @@ const DabGame = () => {
       socket.off('dab_redoCancelled');
       socket.off('dab_moveUndone');
     };
-  }, [socket]);
+  }, [socket, rows, cols, players]);
 
   const handleLineClick = (lineType, r, c) => {
     if (gameState !== 'playing') return;
@@ -281,8 +295,8 @@ const DabGame = () => {
     }).then((result) => {
       if (result.isConfirmed) {
         socket.emit('dab_leaveRoom', roomId);
-        clearRoomId();
         sessionStorage.removeItem('dab_reconnect');
+        clearRoomId();
         navigate('/dab');
       }
     });
@@ -312,11 +326,18 @@ const DabGame = () => {
       <div className="min-h-screen bg-paper flex flex-col items-center justify-center p-4">
         <h1 className="text-3xl sm:text-5xl font-sketch mb-6 text-ink">Dots & Boxes</h1>
         <SketchCard className="p-6 max-w-md w-full mb-4">
+          <input
+            type="text"
+            value={profile.name}
+            onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+            placeholder="Enter your name"
+            className="w-full sketch-border font-handwriting text-ink px-3 py-2 rounded mb-4"
+          />
           <AvatarSelector
-            avatar={avatar}
-            color={avatarColor}
-            onAvatarChange={setAvatar}
-            onColorChange={setAvatarColor}
+            avatarIcon={profile.avatarIcon}
+            color={profile.color}
+            onAvatarChange={(icon) => setProfile({ ...profile, avatarIcon: icon })}
+            onColorChange={(c) => setProfile({ ...profile, color: c })}
           />
         </SketchCard>
         <SketchCard className="p-8 max-w-md w-full">
@@ -420,13 +441,11 @@ const DabGame = () => {
                   {players.map((p, idx) => (
                     <div
                       key={p.id}
-                      className="player-badge"
-                      style={{
-                        color: PLAYER_COLORS[idx],
-                        opacity: p.connected ? 1 : 0.4,
-                      }}
+                      className="flex items-center gap-2 sketch-border px-3 py-2"
+                      style={{ opacity: p.connected ? 1 : 0.4 }}
                     >
-                      {p.name} {!p.connected && '(disconnected)'}
+                      <PlayerAvatar avatarIcon={p.avatarIcon} color={p.color} size={20} />
+                      <span className="font-handwriting font-bold">{p.name}</span>
                     </div>
                   ))}
                 </div>
@@ -469,18 +488,12 @@ const DabGame = () => {
                             : 'border-gray-300'
                         }`}
                         style={{
-                          color: PLAYER_COLORS[idx],
+                          color: players[idx]?.color || PLAYER_COLORS[idx],
                           transform: `rotate(${idx % 2 ? 0.5 : -0.5}deg)`,
                         }}
                       >
                         <div className="flex items-center gap-2">
-                          <div
-                            className="w-4 h-4 rounded-full border-2"
-                            style={{
-                              backgroundColor: PLAYER_COLORS[idx],
-                              borderColor: PLAYER_COLORS[idx],
-                            }}
-                          />
+                          <PlayerAvatar avatarIcon={p.avatarIcon} color={p.color} size={20} />
                           <span className="font-handwriting font-bold">
                             {p.name}
                             {idx === myPlayerIndex && ' (You)'}
@@ -528,8 +541,7 @@ const DabGame = () => {
                         <div
                           className="w-8 h-8 rounded-full mx-auto mb-2 border-2"
                           style={{
-                            backgroundColor: PLAYER_COLORS[currentTurn],
-                            borderColor: PLAYER_COLORS[currentTurn],
+                            backgroundColor: players[myPlayerIndex]?.color || PLAYER_COLORS[myPlayerIndex],
                           }}
                         />
                         <p className="font-sketch text-xl text-ink font-bold">Your Turn!</p>
@@ -540,8 +552,7 @@ const DabGame = () => {
                         <div
                           className="w-8 h-8 rounded-full mx-auto mb-2 border-2"
                           style={{
-                            backgroundColor: PLAYER_COLORS[currentTurn],
-                            borderColor: PLAYER_COLORS[currentTurn],
+                            backgroundColor: players[currentTurn]?.color || PLAYER_COLORS[currentTurn],
                           }}
                         />
                         <p className="font-handwriting text-gray-600">
@@ -678,6 +689,8 @@ const DabGame = () => {
                                   Array.from({ length: cols }, (_, c) => {
                                     const owner = horizontalLines[r]?.[c];
                                     const seed = r * 100 + c;
+                                    const isLastMoveLine =
+                                      lastMove && lastMove.lineType === 'h' && lastMove.r === r && lastMove.c === c;
                                     return (
                                       <g key={`h-${r}-${c}`}>
                                         {owner !== null && (
@@ -694,6 +707,9 @@ const DabGame = () => {
                                             fill="none"
                                             strokeLinecap="round"
                                             vectorEffect="non-scaling-stroke"
+                                            style={{
+                                              filter: isLastMoveLine ? 'drop-shadow(0 0 4px #38bdf8)' : undefined,
+                                            }}
                                           />
                                         )}
                                         <line
@@ -721,6 +737,8 @@ const DabGame = () => {
                                   Array.from({ length: cols + 1 }, (_, c) => {
                                     const owner = verticalLines[r]?.[c];
                                     const seed = r * 100 + c + 1000;
+                                    const isLastMoveLine =
+                                      lastMove && lastMove.lineType === 'v' && lastMove.r === r && lastMove.c === c;
                                     return (
                                       <g key={`v-${r}-${c}`}>
                                         {owner !== null && (
@@ -737,6 +755,9 @@ const DabGame = () => {
                                             fill="none"
                                             strokeLinecap="round"
                                             vectorEffect="non-scaling-stroke"
+                                            style={{
+                                              filter: isLastMoveLine ? 'drop-shadow(0 0 4px #38bdf8)' : undefined,
+                                            }}
                                           />
                                         )}
                                         <line
@@ -795,6 +816,10 @@ const DabGame = () => {
           </div>
         )}
       </div>
+
+      {gameState === 'playing' && (
+        <AvatarReactionBar socket={socket} roomId={roomId} gamePrefix="dab" players={players} />
+      )}
     </GameLayout>
   );
 };

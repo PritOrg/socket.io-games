@@ -7,7 +7,7 @@ class TicTacToeManager extends BaseManager {
   }
 
   handleConnection(socket) {
-    socket.on('ttt_createRoom', (playerName) => this.createRoom(socket, playerName));
+    socket.on('ttt_createRoom', (data) => this.createRoom(socket, data));
     socket.on('ttt_joinRoom', (data) => this.joinRoom(socket, data));
     socket.on('ttt_makeMove', (data) => this.makeMove(socket, data));
     socket.on('ttt_restartGame', (roomId) => this.restartGame(socket, roomId));
@@ -40,12 +40,21 @@ class TicTacToeManager extends BaseManager {
     return null;
   }
 
-  createRoom(socket, playerName) {
+  createRoom(socket, data) {
+    const { playerName, avatarIcon, color } = typeof data === 'string' ? { playerName: data } : data;
     const roomId = this.generateRoomId();
     socket.join(roomId);
     const room = {
       id: roomId,
-      players: [{ id: socket.id, name: playerName, connected: true }],
+      players: [
+        {
+          id: socket.id,
+          name: playerName,
+          avatarIcon,
+          color,
+          connected: true,
+        },
+      ],
       board: Array(9).fill(null),
       gameState: 'waiting',
       currentTurn: null,
@@ -57,7 +66,9 @@ class TicTacToeManager extends BaseManager {
     this.sendRoomInfo(roomId);
   }
 
-  joinRoom(socket, { roomId, playerName }) {
+  joinRoom(socket, data) {
+    const { roomId, playerName, avatarIcon, color } =
+      typeof data === 'string' ? { roomId: data, playerName: 'Player' } : data;
     const roomIdSanitized = this.sanitizeRoomId(roomId);
     const room = this.rooms.get(roomIdSanitized);
     if (!room || room.players.length >= 2) {
@@ -70,12 +81,18 @@ class TicTacToeManager extends BaseManager {
     }
 
     socket.join(room.id);
-    room.players.push({ id: socket.id, name: playerName, connected: true });
+    room.players.push({
+      id: socket.id,
+      name: playerName,
+      avatarIcon,
+      color,
+      connected: true,
+    });
     this._trackSocket(socket.id, room.id);
     room.gameState = 'playing';
     room.currentTurn = room.players[0].id;
 
-    this.clearTimer(`empty_${roomId}`);
+    this.clearTimer(`empty_${roomIdSanitized}`);
     this.io.to(room.id).emit(`${this.gamePrefix}_gameStarted`);
     this.sendRoomInfo(room.id);
   }

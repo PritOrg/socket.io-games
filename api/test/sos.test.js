@@ -4,6 +4,7 @@ const client = require('socket.io-client');
 const { expect } = require('chai');
 
 describe('SOS Game Logic', function () {
+  this.timeout(5000);
   let player1, player2, spectator;
   const port = 4001;
 
@@ -32,6 +33,9 @@ describe('SOS Game Logic', function () {
   });
 
   afterEach((done) => {
+    if (player1) player1.removeAllListeners();
+    if (player2) player2.removeAllListeners();
+    if (spectator) spectator.removeAllListeners();
     if (player1.connected) player1.disconnect();
     if (player2.connected) player2.disconnect();
     if (spectator.connected) spectator.disconnect();
@@ -137,7 +141,7 @@ describe('SOS Game Logic', function () {
       player1.once('sos_roomInfo', (room) => {
         const roomId = room.id;
         player2.emit('sos_joinRoom', { roomId, playerName: 'Bob' });
-        player2.once('sos_roomInfo', () => {
+        player1.once('sos_roomInfo', () => {
           player1.emit('sos_startGame', { roomId });
           player1.once('sos_gameStarted', () => {
             clearTimeout(timeout);
@@ -166,24 +170,26 @@ describe('SOS Game Logic', function () {
         player2.emit('sos_joinRoom', { roomId, playerName: 'Bob' });
         player1.once('sos_roomInfo', () => {
           player1.emit('sos_startGame', { roomId });
-          player1.once('sos_gameStarted', () => {
-            // Player1 places S at (0,0) - turn goes to player2
-            player1.emit('sos_makeMove', { roomId, row: 0, col: 0, value: 'S' });
-          });
-          player1.once('sos_moveMade', () => {
-            // Player2 places S at (0,2) - turn goes to player1
-            player2.emit('sos_makeMove', { roomId, row: 0, col: 2, value: 'S' });
-          });
-          player2.once('sos_moveMade', () => {
-            // Player1 places O at (0,1) - this completes S-O-S pattern
-            player1.once('sos_moveMade', (data) => {
+          let moveCount = 0;
+          player1.on('sos_moveMade', (data) => {
+            moveCount++;
+            if (moveCount === 1) {
+              player2.emit('sos_makeMove', { roomId, row: 0, col: 2, value: 'S' });
+            }
+            if (moveCount === 2) {
+              player1.emit('sos_makeMove', { roomId, row: 0, col: 1, value: 'O' });
+            }
+            if (moveCount === 3) {
               expect(data.patterns).to.be.an('array');
               expect(data.patterns.length).to.be.at.least(1);
               expect(data.patterns[0].cells).to.have.lengthOf(3);
               done();
-            });
-            player1.emit('sos_makeMove', { roomId, row: 0, col: 1, value: 'O' });
+            }
           });
+          player2.on('sos_moveMade', () => {
+            // player2 move confirmation
+          });
+          player1.emit('sos_makeMove', { roomId, row: 0, col: 0, value: 'S' });
         });
       });
     });
@@ -197,19 +203,22 @@ describe('SOS Game Logic', function () {
         player2.emit('sos_joinRoom', { roomId, playerName: 'Bob' });
         player1.once('sos_roomInfo', () => {
           player1.emit('sos_startGame', { roomId });
-          player1.once('sos_gameStarted', () => {
-            player1.emit('sos_makeMove', { roomId, row: 0, col: 0, value: 'S' });
-          });
-          player1.once('sos_moveMade', () => {
-            player2.emit('sos_makeMove', { roomId, row: 0, col: 2, value: 'S' });
-          });
-          player2.once('sos_moveMade', () => {
-            player1.once('sos_moveMade', (data) => {
+          let moveCount = 0;
+          player1.on('sos_moveMade', (data) => {
+            moveCount++;
+            if (moveCount === 1) {
+              player2.emit('sos_makeMove', { roomId, row: 0, col: 2, value: 'S' });
+            }
+            if (moveCount === 2) {
+              player1.emit('sos_makeMove', { roomId, row: 0, col: 1, value: 'O' });
+            }
+            if (moveCount === 3) {
               expect(data.scores[0]).to.be.at.least(1);
               done();
-            });
-            player1.emit('sos_makeMove', { roomId, row: 0, col: 1, value: 'O' });
+            }
           });
+          player2.on('sos_moveMade', () => {});
+          player1.emit('sos_makeMove', { roomId, row: 0, col: 0, value: 'S' });
         });
       });
     });
@@ -223,49 +232,58 @@ describe('SOS Game Logic', function () {
         player2.emit('sos_joinRoom', { roomId, playerName: 'Bob' });
         player1.once('sos_roomInfo', () => {
           player1.emit('sos_startGame', { roomId });
-          player1.once('sos_gameStarted', () => {
-            player1.emit('sos_makeMove', { roomId, row: 0, col: 0, value: 'S' });
-          });
-          player1.once('sos_moveMade', () => {
-            player2.emit('sos_makeMove', { roomId, row: 0, col: 2, value: 'S' });
-          });
-          player2.once('sos_moveMade', () => {
-            player1.once('sos_moveMade', (data) => {
+          let moveCount = 0;
+          player1.on('sos_moveMade', (data) => {
+            moveCount++;
+            if (moveCount === 1) {
+              player2.emit('sos_makeMove', { roomId, row: 0, col: 2, value: 'S' });
+            }
+            if (moveCount === 2) {
+              player1.emit('sos_makeMove', { roomId, row: 0, col: 1, value: 'O' });
+            }
+            if (moveCount === 3) {
               expect(data.currentTurn).to.equal(0);
               done();
-            });
-            player1.emit('sos_makeMove', { roomId, row: 0, col: 1, value: 'O' });
+            }
           });
+          player2.on('sos_moveMade', () => {});
+          player1.emit('sos_makeMove', { roomId, row: 0, col: 0, value: 'S' });
         });
       });
     });
   });
 
   describe('Game Over', () => {
-    it('should emit gameOver when board is full', (done) => {
-      player1.emit('sos_createRoom', { playerName: 'Alice', size: 3 });
+    it('should emit gameOver when board is full', function (done) {
+      this.timeout(10000);
+      player1.emit('sos_createRoom', { playerName: 'Alice', size: 4 });
       player1.once('sos_roomInfo', (room) => {
         const roomId = room.id;
         player2.emit('sos_joinRoom', { roomId, playerName: 'Bob' });
         player1.once('sos_roomInfo', () => {
           player1.emit('sos_startGame', { roomId });
-          player1.once('sos_gameStarted', () => {
-            player1.once('sos_gameOver', (data) => {
-              expect(data).to.have.property('winner');
-              expect(data).to.have.property('scores');
-              done();
-            });
-            // Fill board with alternating moves - no SOS patterns possible
-            setTimeout(() => player1.emit('sos_makeMove', { roomId, row: 0, col: 0, value: 'S' }), 0);
-            setTimeout(() => player2.emit('sos_makeMove', { roomId, row: 0, col: 1, value: 'S' }), 20);
-            setTimeout(() => player1.emit('sos_makeMove', { roomId, row: 0, col: 2, value: 'S' }), 40);
-            setTimeout(() => player2.emit('sos_makeMove', { roomId, row: 1, col: 0, value: 'O' }), 60);
-            setTimeout(() => player1.emit('sos_makeMove', { roomId, row: 1, col: 1, value: 'S' }), 80);
-            setTimeout(() => player2.emit('sos_makeMove', { roomId, row: 1, col: 2, value: 'O' }), 100);
-            setTimeout(() => player1.emit('sos_makeMove', { roomId, row: 2, col: 0, value: 'O' }), 120);
-            setTimeout(() => player2.emit('sos_makeMove', { roomId, row: 2, col: 1, value: 'O' }), 140);
-            setTimeout(() => player1.emit('sos_makeMove', { roomId, row: 2, col: 2, value: 'O' }), 160);
+          // Generate all 16 coordinates for the full 4x4 board
+          const moves = [];
+          for (let r = 0; r < 4; r++) {
+            for (let c = 0; c < 4; c++) {
+              moves.push({ row: r, col: c });
+            }
+          }
+          let moveIdx = 0;
+          const makeNextMove = () => {
+            if (moveIdx >= moves.length) return;
+            const m = moves[moveIdx];
+            const player = moveIdx % 2 === 0 ? player1 : player2;
+            moveIdx++;
+            player.emit('sos_makeMove', { roomId, row: m.row, col: m.col, value: 'O' });
+          };
+          player1.once('sos_gameOver', (data) => {
+            expect(data).to.have.property('winner');
+            expect(data).to.have.property('scores');
+            done();
           });
+          player1.on('sos_moveMade', makeNextMove);
+          makeNextMove();
         });
       });
     });

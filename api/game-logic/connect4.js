@@ -21,14 +21,23 @@ class Connect4Manager extends BaseManager {
     socket.on('disconnect', () => this.handleDisconnect(socket));
   }
 
-  createRoom(socket, { playerName }) {
+  createRoom(socket, data) {
+    const { playerName, avatarIcon, color } = typeof data === 'string' ? { playerName: data } : data;
     const roomId = this.generateRoomId();
     socket.join(roomId);
 
     const room = {
       id: roomId,
       creator: socket.id,
-      players: [{ id: socket.id, name: this.sanitizePlayerName(playerName), connected: true }],
+      players: [
+        {
+          id: socket.id,
+          name: this.sanitizePlayerName(playerName),
+          avatarIcon,
+          color,
+          connected: true,
+        },
+      ],
       spectators: [],
       gameState: 'waiting',
       board: this.createEmptyBoard(),
@@ -49,7 +58,9 @@ class Connect4Manager extends BaseManager {
       .map(() => Array(7).fill(null));
   }
 
-  joinRoom(socket, { roomId, playerName, asSpectator }) {
+  joinRoom(socket, data) {
+    const { roomId, playerName, avatarIcon, color, asSpectator } =
+      typeof data === 'string' ? { roomId: data, playerName: 'Player' } : data;
     const sanitizedRoomId = this.sanitizeRoomId(roomId);
     if (!sanitizedRoomId) {
       socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Error', text: 'Invalid room ID' });
@@ -66,7 +77,13 @@ class Connect4Manager extends BaseManager {
     const sanitizedName = this.sanitizePlayerName(playerName);
 
     if (asSpectator || room.players.length >= 2) {
-      room.spectators.push({ id: socket.id, name: sanitizedName, connected: true });
+      room.spectators.push({
+        id: socket.id,
+        name: sanitizedName,
+        avatarIcon,
+        color,
+        connected: true,
+      });
       this._trackSocket(socket.id, room.id);
       this.sendRoomInfo(room.id);
       return;
@@ -77,7 +94,13 @@ class Connect4Manager extends BaseManager {
       return;
     }
 
-    room.players.push({ id: socket.id, name: sanitizedName, connected: true });
+    room.players.push({
+      id: socket.id,
+      name: sanitizedName,
+      avatarIcon,
+      color,
+      connected: true,
+    });
     this._trackSocket(socket.id, room.id);
     this.sendRoomInfo(room.id);
   }

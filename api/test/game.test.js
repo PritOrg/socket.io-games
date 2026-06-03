@@ -41,7 +41,7 @@ describe('PaperParty Backend Tests', function () {
 
   describe('Bingo Game Logic', () => {
     it('should create a bingo room', (done) => {
-      player1.emit('bingo_createRoom', 'Alice');
+      player1.emit('bingo_createRoom', { playerName: 'Alice' });
       player1.once('bingo_roomInfo', (room) => {
         expect(room).to.have.property('id');
         expect(room.players).to.have.lengthOf(1);
@@ -51,7 +51,7 @@ describe('PaperParty Backend Tests', function () {
     });
 
     it('should join a bingo room', (done) => {
-      player1.emit('bingo_createRoom', 'Alice');
+      player1.emit('bingo_createRoom', { playerName: 'Alice' });
       player1.once('bingo_roomInfo', (room) => {
         const roomId = room.id;
         player2.emit('bingo_joinRoom', { roomId, playerName: 'Bob' });
@@ -71,7 +71,7 @@ describe('PaperParty Backend Tests', function () {
 
   describe('TicTacToe Game Logic', () => {
     it('should create a tictactoe room', (done) => {
-      player1.emit('ttt_createRoom', 'Alice');
+      player1.emit('ttt_createRoom', { playerName: 'Alice' });
       player1.once('ttt_roomInfo', (room) => {
         expect(room).to.have.property('id');
         expect(room.players).to.have.lengthOf(1);
@@ -80,7 +80,7 @@ describe('PaperParty Backend Tests', function () {
     });
 
     it('should start tictactoe when second player joins', (done) => {
-      player1.emit('ttt_createRoom', 'Alice');
+      player1.emit('ttt_createRoom', { playerName: 'Alice' });
       player1.once('ttt_roomInfo', (room) => {
         const roomId = room.id;
         player2.emit('ttt_joinRoom', { roomId, playerName: 'Bob' });
@@ -92,7 +92,7 @@ describe('PaperParty Backend Tests', function () {
     });
 
     it('should handle moves correctly', (done) => {
-      player1.emit('ttt_createRoom', 'Alice');
+      player1.emit('ttt_createRoom', { playerName: 'Alice' });
       player1.once('ttt_roomInfo', (room) => {
         const roomId = room.id;
         player2.emit('ttt_joinRoom', { roomId, playerName: 'Bob' });
@@ -110,7 +110,7 @@ describe('PaperParty Backend Tests', function () {
     });
 
     it('should detect a winner in TicTacToe', (done) => {
-      player1.emit('ttt_createRoom', 'Alice');
+      player1.emit('ttt_createRoom', { playerName: 'Alice' });
       player1.once('ttt_roomInfo', (room) => {
         const roomId = room.id;
         player2.emit('ttt_joinRoom', { roomId, playerName: 'Bob' });
@@ -147,7 +147,7 @@ describe('PaperParty Backend Tests', function () {
 
   describe('Ultimate TicTacToe Game Logic', () => {
     it('should create a uttt room', (done) => {
-      player1.emit('uttt_createRoom', 'Alice');
+      player1.emit('uttt_createRoom', { playerName: 'Alice' });
       player1.once('uttt_roomInfo', (room) => {
         expect(room).to.have.property('id');
         expect(room.players).to.have.lengthOf(1);
@@ -157,7 +157,7 @@ describe('PaperParty Backend Tests', function () {
     });
 
     it('should join a uttt room and start game', (done) => {
-      player1.emit('uttt_createRoom', 'Alice');
+      player1.emit('uttt_createRoom', { playerName: 'Alice' });
       player1.once('uttt_roomInfo', (room) => {
         const roomId = room.id;
         player2.emit('uttt_joinRoom', { roomId, playerName: 'Bob' });
@@ -169,7 +169,7 @@ describe('PaperParty Backend Tests', function () {
     });
 
     it('should handle moves correctly and update activeGrid', (done) => {
-      player1.emit('uttt_createRoom', 'Alice');
+      player1.emit('uttt_createRoom', { playerName: 'Alice' });
       player1.once('uttt_roomInfo', (room) => {
         const roomId = room.id;
         player2.emit('uttt_joinRoom', { roomId, playerName: 'Bob' });
@@ -190,7 +190,7 @@ describe('PaperParty Backend Tests', function () {
     });
 
     it('should reject moves in wrong grid', (done) => {
-      player1.emit('uttt_createRoom', 'Alice');
+      player1.emit('uttt_createRoom', { playerName: 'Alice' });
       player1.once('uttt_roomInfo', (room) => {
         const roomId = room.id;
         player2.emit('uttt_joinRoom', { roomId, playerName: 'Bob' });
@@ -214,7 +214,7 @@ describe('PaperParty Backend Tests', function () {
     });
 
     it('should detect inner win and update macroBoard', (done) => {
-      player1.emit('uttt_createRoom', 'Alice');
+      player1.emit('uttt_createRoom', { playerName: 'Alice' });
       player1.once('uttt_roomInfo', (room) => {
         const roomId = room.id;
         player2.emit('uttt_joinRoom', { roomId, playerName: 'Bob' });

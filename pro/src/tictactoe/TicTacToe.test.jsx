@@ -32,8 +32,8 @@ const findEventCb = (event) => {
 const playingRoomInfo = {
   id: 'TTT01',
   players: [
-    { id: 'p1', name: 'Alice', connected: true },
-    { id: 'p2', name: 'Bob', connected: true },
+    { id: 'p1', name: 'Alice', connected: true, avatarIcon: 'cat', color: '#2a2a3e' },
+    { id: 'p2', name: 'Bob', connected: true, avatarIcon: 'dog', color: '#c73e1d' },
   ],
   gameState: 'playing',
   currentTurn: 'p1',
@@ -58,7 +58,10 @@ describe('TicTacToe', () => {
       await act(async () => {
         fireEvent.click(screen.getByText('Create'));
       });
-      expect(mockSocket.emit).toHaveBeenCalledWith('ttt_createRoom', expect.any(String));
+      expect(mockSocket.emit).toHaveBeenCalledWith(
+        'ttt_createRoom',
+        expect.objectContaining({ playerName: expect.any(String) }),
+      );
     });
   });
 
@@ -86,7 +89,7 @@ describe('TicTacToe', () => {
       expect(screen.getByText('Bo')).toBeTruthy();
     });
 
-    it('shows Rematch button when game ends with win', async () => {
+    it('shows Play Again button when game ends with win', async () => {
       render(<TicTacToe />, { wrapper: Wrapper });
 
       const cb = findEventCb('ttt_roomInfo');
@@ -99,10 +102,10 @@ describe('TicTacToe', () => {
         gameWonCb({ winner: 'p1', winningLine: [0, 1, 2] });
       });
 
-      expect(screen.getByText('Rematch')).toBeTruthy();
+      expect(screen.getByText('Play Again')).toBeTruthy();
     });
 
-    it('shows Rematch button when game ends with draw', async () => {
+    it('shows Play Again button when game ends with draw', async () => {
       render(<TicTacToe />, { wrapper: Wrapper });
 
       const cb = findEventCb('ttt_roomInfo');
@@ -115,7 +118,7 @@ describe('TicTacToe', () => {
         gameDrawCb();
       });
 
-      expect(screen.getByText('Rematch')).toBeTruthy();
+      expect(screen.getByText('Play Again')).toBeTruthy();
     });
   });
 
@@ -127,6 +130,8 @@ describe('TicTacToe', () => {
       await act(async () => {
         cb(playingRoomInfo);
       });
+
+      await screen.findByText('Your turn!');
 
       const boardGrid = container.querySelector('.grid.grid-cols-3');
       expect(boardGrid).toBeTruthy();
@@ -141,19 +146,19 @@ describe('TicTacToe', () => {
   });
 
   describe('Avatar Selector', () => {
-    it('shows avatar picker in the lobby when no room', () => {
+    it('shows avatar icon selector in the lobby when no room', () => {
       render(<TicTacToe />, { wrapper: Wrapper });
-      expect(screen.getByText('🐼')).toBeTruthy();
-      expect(screen.getByText('🦊')).toBeTruthy();
+      const avatarButtons = screen.getAllByRole('button').filter((b) => b.querySelector('svg'));
+      expect(avatarButtons.length).toBe(12);
     });
 
-    it('allows selecting an avatar', async () => {
+    it('allows selecting an avatar icon', async () => {
       render(<TicTacToe />, { wrapper: Wrapper });
-      const fox = screen.getByText('🦊');
+      const avatarButtons = screen.getAllByRole('button').filter((b) => b.querySelector('svg'));
       await act(async () => {
-        fireEvent.click(fox);
+        fireEvent.click(avatarButtons[1]);
       });
-      expect(fox.closest('button')).toHaveClass('border-ink');
+      expect(avatarButtons[1].className).toContain('border-ink');
     });
   });
 });

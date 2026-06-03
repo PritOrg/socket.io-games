@@ -23,13 +23,26 @@ class BingoManager extends BaseManager {
     socket.on('disconnect', () => this.handleDisconnect(socket));
   }
 
-  createRoom(socket, creatorName) {
+  createRoom(socket, data) {
+    // Support both old string format and new object format
+    const creatorName = typeof data === 'string' ? data : data.creatorName || data.playerName;
+    const avatarIcon = typeof data === 'object' ? data.avatarIcon : undefined;
+    const color = typeof data === 'object' ? data.color : undefined;
+
     const roomId = uuidv4().slice(0, 6).toUpperCase();
     socket.join(roomId);
     const room = {
       id: roomId,
       creator: socket.id,
-      players: [{ id: socket.id, name: creatorName, connected: true }],
+      players: [
+        {
+          id: socket.id,
+          name: creatorName || 'Player 1',
+          avatarIcon,
+          color,
+          connected: true,
+        },
+      ],
       currentTurn: null,
       turnOrder: [socket.id],
       gameState: 'waiting',
@@ -48,7 +61,7 @@ class BingoManager extends BaseManager {
     });
   }
 
-  joinRoom(socket, { roomId, playerName }) {
+  joinRoom(socket, { roomId, playerName, avatarIcon, color }) {
     const sanitizedRoomId = this.sanitizeRoomId(roomId);
     if (!sanitizedRoomId) {
       socket.emit(`${this.gamePrefix}_alert`, {
@@ -77,7 +90,13 @@ class BingoManager extends BaseManager {
     }
 
     socket.join(room.id);
-    room.players.push({ id: socket.id, name: playerName, connected: true });
+    room.players.push({
+      id: socket.id,
+      name: playerName,
+      avatarIcon,
+      color,
+      connected: true,
+    });
     room.turnOrder.push(socket.id);
     this._trackSocket(socket.id, room.id);
 

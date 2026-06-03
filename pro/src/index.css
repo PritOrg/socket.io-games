@@ -202,3 +202,50 @@ body {
   background-size: 20px 20px;
   min-height: 100vh;
 }
+
+[data-theme='dark'] .text-ink {
+  color: #e5e7eb;
+}
+
+[data-theme='dark'] .bg-paper {
+  background-color: #1a1a2e;
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 30px,
+    rgba(229, 231, 235, 0.03) 30px,
+    rgba(229, 231, 235, 0.03) 31px
+  );
+}
+
+[data-theme='dark'] .sketch-card {
+  background: #252542;
+  border: 2px solid #e5e7eb;
+}
+
+[data-theme='dark'] .sketch-card::before {
+  border: 2px solid #e5e7eb;
+}
+
+[data-theme='dark'] .sketch-button {
+  background: #252542;
+  border: 2px solid #e5e7eb;
+  color: #e5e7eb;
+}
+
+[data-theme='dark'] .glass {
+  background: rgba(37, 37, 66, 0.7);
+  border: 1px solid rgba(229, 231, 235, 0.2);
+}
+
+[data-theme='dark'] .player-badge {
+  color: #e5e7eb;
+}
+
+[data-theme='dark'] .font-sketch {
+  color: #e5e7eb;
+}
+
+[data-theme='dark'] .font-handwriting {
+  color: #d1d5e0;
+}

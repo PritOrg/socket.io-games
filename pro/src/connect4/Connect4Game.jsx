@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useGameContext } from '../context/GameContext';
 import { useNavigate } from 'react-router-dom';
 import GameLayout from '../components/ui/GameLayout';
@@ -6,19 +6,30 @@ import RoomLobby from '../components/ui/RoomLobby';
 import MatchReport from '../components/ui/MatchReport';
 import SketchButton from '../components/ui/SketchButton';
 import TurnIndicator from '../components/ui/TurnIndicator';
+import { AvatarSelector, AvatarReactionBar } from '../components/ui';
 import Swal from 'sweetalert2';
+import useSound from 'use-sound';
+import confetti from 'canvas-confetti';
 
 const Connect4Game = () => {
-  const { socket, playerName, setPlayerName, clearRoomId } = useGameContext();
+  const { socket, clearRoomId, profile, setProfile } = useGameContext();
   const navigate = useNavigate();
   const [gameState, setGameState] = useState('lobby');
   const [room, setRoom] = useState(null);
   const [hoverCol, setHoverCol] = useState(null);
   const [winLine, setWinLine] = useState(null);
+  const reconnectAttempted = useRef(false);
+  const [lastMove, setLastMove] = useState(null);
+
+  const [playMove] = useSound('/sounds/move.mp3', { volume: 0.5 });
+  const [playWin] = useSound('/sounds/win.mp3', { volume: 0.7 });
 
   useEffect(() => {
+    if (!socket) return;
+
     const saved = sessionStorage.getItem('c4_reconnect');
-    if (saved && socket) {
+    if (saved && !reconnectAttempted.current) {
+      reconnectAttempted.current = true;
       const data = JSON.parse(saved);
       socket.emit('c4_reconnect', data);
     }
@@ -36,7 +47,7 @@ const Connect4Game = () => {
         'c4_reconnect',
         JSON.stringify({
           roomId: data.id,
-          playerId: data.players?.find((p) => p.name === playerName)?.id || socket.id,
+          playerId: data.players?.find((p) => p.id === socket.id)?.id || socket.id,
         }),
       );
     });
@@ -47,12 +58,23 @@ const Connect4Game = () => {
 
     socket.on('c4_moveMade', (data) => {
       setRoom((prev) => ({ ...prev, ...data }));
+      if (data.lastMove) {
+        setLastMove(data.lastMove);
+        playMove();
+      }
     });
 
     socket.on('c4_gameOver', (data) => {
       setGameState('ended');
       if (data.winLine) {
         setWinLine(data.winLine.map((c) => `${c.row}-${c.col}`));
+        playWin();
+        // Subtle confetti for Connect4 win
+        confetti({
+          particleCount: 25,
+          spread: 30,
+          origin: { y: 0.7 },
+        });
       }
     });
 
@@ -82,16 +104,26 @@ const Connect4Game = () => {
       socket.off('c4_gameRestarted');
       socket.off('c4_alert');
     };
-  }, [socket, playerName]);
+  }, [socket]);
 
   const handleCreateRoom = () => {
-    if (!socket || !playerName) return;
-    socket.emit('c4_createRoom', { playerName });
+    if (!socket) return;
+    socket.emit('c4_createRoom', {
+      playerName: profile.name,
+      avatarIcon: profile.avatarIcon,
+      color: profile.color,
+    });
   };
 
   const handleJoinRoom = (roomIdToJoin, asSpectator) => {
-    if (!socket || !playerName) return;
-    socket.emit('c4_joinRoom', { roomId: roomIdToJoin, playerName, asSpectator });
+    if (!socket) return;
+    socket.emit('c4_joinRoom', {
+      roomId: roomIdToJoin,
+      playerName: profile.name,
+      avatarIcon: profile.avatarIcon,
+      color: profile.color,
+      asSpectator,
+    });
   };
 
   const handleStartGame = () => {
@@ -116,18 +148,16 @@ const Connect4Game = () => {
 
   const handleColumnClick = (col) => {
     if (!room || gameState !== 'playing') return;
-    const myPlayerIndex = room.players.findIndex((p) => p.name === playerName);
-    if (!room.players[myPlayerIndex] || myPlayerIndex !== room.currentTurn) return;
+    if (room.currentTurn !== socket?.id) return;
 
     socket.emit('c4_makeMove', { roomId: room.id, column: col });
   };
 
-  const isSpectator = room?.spectators?.some((s) => s.name === playerName);
-  const isHost = room && room.creator === (room.players.find((p) => p.name === playerName)?.id || '');
+  const isSpectator = room?.spectators?.some((s) => s.id === socket?.id);
+  const isHost = room && room.creator === socket?.id;
 
   if (gameState === 'ended' && room) {
-    const myPlayer = room.players.find((p) => p.name === playerName);
-    const isWinner = room.winner === myPlayer?.id;
+    const isWinner = room.winner === socket?.id;
     return <MatchReport winner={room.winner} isWinner={isWinner} onRematch={handleRestart} onLeave={handleLeave} />;
   }
 
@@ -147,11 +177,10 @@ const Connect4Game = () => {
   }
 
   if (room && gameState === 'playing') {
-    const myPlayer = room.players.find((p) => p.name === playerName);
-    const canPlay = myPlayer && myPlayer.id === room.currentTurn && !isSpectator;
+    const canPlay = room.currentTurn === socket?.id && !isSpectator;
 
     return (
-      <GameLayout>
+      <GameLayout socket={socket} roomId={room.id} gamePrefix="c4" players={room.players}>
         <div className="flex flex-col items-center gap-4 p-4">
           {isSpectator && (
             <div className="sketch-card px-4 py-2 bg-blue-100">
@@ -169,12 +198,13 @@ const Connect4Game = () => {
             {room.board.map((row, r) =>
               row.map((cell, c) => {
                 const isWinning = winLine && winLine.includes(`${r}-${c}`);
+                const isLastMove = lastMove && lastMove.row === r && lastMove.col === c;
                 return (
                   <div
                     key={`${r}-${c}`}
                     className={`w-10 h-10 sm:w-12 sm:h-12 border-2 rounded-full flex items-center justify-center ${
-                      isWinning ? 'border-yellow-400' : 'border-ink/20'
-                    }`}
+                      isWinning ? 'border-yellow-400 ring-2 ring-yellow-400' : 'border-ink/20'
+                    } ${isLastMove ? 'ring-2 ring-sky-400' : ''}`}
                   >
                     {cell !== null && (
                       <div className={`w-8 h-8 rounded-full ${cell === 0 ? 'bg-red-500' : 'bg-yellow-500'}`} />
@@ -210,6 +240,10 @@ const Connect4Game = () => {
             Leave Room
           </SketchButton>
         </div>
+
+        {gameState === 'playing' && (
+          <AvatarReactionBar socket={socket} roomId={room.id} gamePrefix="c4" players={room.players} />
+        )}
       </GameLayout>
     );
   }
@@ -223,13 +257,20 @@ const Connect4Game = () => {
           <label className="paper-font text-sm text-ink/60">Your Name</label>
           <input
             type="text"
-            value={playerName}
-            onChange={(e) => setPlayerName(e.target.value)}
+            value={profile.name}
+            onChange={(e) => setProfile({ ...profile, name: e.target.value })}
             placeholder="Enter name"
             className="sketch-input w-full mt-1"
             maxLength={20}
           />
         </div>
+
+        <AvatarSelector
+          avatarIcon={profile.avatarIcon}
+          color={profile.color}
+          onAvatarChange={(icon) => setProfile({ ...profile, avatarIcon: icon })}
+          onColorChange={(c) => setProfile({ ...profile, color: c })}
+        />
 
         <SketchButton onClick={handleCreateRoom} className="w-full">
           Create Room
@@ -245,14 +286,14 @@ const Connect4Game = () => {
             onKeyPress={(e) => {
               if (e.key === 'Enter') {
                 const roomId = e.target.value.trim();
-                if (roomId && playerName) handleJoinRoom(roomId);
+                if (roomId) handleJoinRoom(roomId);
               }
             }}
           />
           <SketchButton
             onClick={(e) => {
               const roomIdInput = e.target.previousElementSibling;
-              if (roomIdInput?.value && playerName) handleJoinRoom(roomIdInput.value.trim());
+              if (roomIdInput?.value) handleJoinRoom(roomIdInput.value.trim());
             }}
             className="w-full"
           >
@@ -261,7 +302,7 @@ const Connect4Game = () => {
           <SketchButton
             onClick={(e) => {
               const roomIdInput = e.target.previousElementSibling.previousElementSibling;
-              if (roomIdInput?.value && playerName) handleJoinRoom(roomIdInput.value.trim(), true);
+              if (roomIdInput?.value) handleJoinRoom(roomIdInput.value.trim(), true);
             }}
             className="w-full mt-2"
             style={{ background: '#f0f8ff' }}

@@ -23,7 +23,7 @@ class DabManager extends BaseManager {
     socket.on('disconnect', () => this.handleDisconnect(socket));
   }
 
-  createRoom(socket, { mode, customRows, customCols, customPlayers, playerName }) {
+  createRoom(socket, { mode, customRows, customCols, customPlayers, playerName, avatarIcon, color }) {
     let rows, cols;
     switch (mode) {
       case 'classic':
@@ -54,7 +54,15 @@ class DabManager extends BaseManager {
     const room = {
       id: roomId,
       creator: socket.id,
-      players: [{ id: socket.id, name: playerName || 'Player 1', connected: true }],
+      players: [
+        {
+          id: socket.id,
+          name: playerName || 'Player 1',
+          avatarIcon,
+          color,
+          connected: true,
+        },
+      ],
       gameState: 'waiting',
       currentTurn: 0,
       rows,
@@ -85,7 +93,7 @@ class DabManager extends BaseManager {
     this.sendRoomInfo(roomId);
   }
 
-  joinRoom(socket, { roomId, playerName }) {
+  joinRoom(socket, { roomId, playerName, avatarIcon, color }) {
     const sanitizedRoomId = this.sanitizeRoomId(roomId);
     if (!sanitizedRoomId) {
       socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Error', text: 'Invalid room ID' });
@@ -106,7 +114,13 @@ class DabManager extends BaseManager {
     }
 
     socket.join(room.id);
-    room.players.push({ id: socket.id, name: playerName, connected: true });
+    room.players.push({
+      id: socket.id,
+      name: playerName,
+      avatarIcon,
+      color,
+      connected: true,
+    });
     this._trackSocket(socket.id, room.id);
 
     this.sendRoomInfo(room.id);

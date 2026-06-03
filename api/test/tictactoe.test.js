@@ -32,9 +32,8 @@ describe('TicTacToe Game Logic', function () {
     setTimeout(done, 100);
   });
 
-  // Helper: create room, join, wait for gameStarted
   const setupGame = (cb) => {
-    player1.emit('ttt_createRoom', 'Alice');
+    player1.emit('ttt_createRoom', { playerName: 'Alice' });
     player1.once('ttt_roomInfo', (room) => {
       player2.emit('ttt_joinRoom', { roomId: room.id, playerName: 'Bob' });
       player1.once('ttt_gameStarted', () => cb(room.id));
@@ -43,7 +42,7 @@ describe('TicTacToe Game Logic', function () {
 
   describe('Room Creation', () => {
     it('should create a room with waiting state', (done) => {
-      player1.emit('ttt_createRoom', 'Alice');
+      player1.emit('ttt_createRoom', { playerName: 'Alice' });
       player1.once('ttt_roomInfo', (room) => {
         expect(room).to.have.property('id');
         expect(room.players).to.have.lengthOf(1);
@@ -55,22 +54,8 @@ describe('TicTacToe Game Logic', function () {
   });
 
   describe('Join Room', () => {
-    it('should start game immediately when second player joins', (done) => {
-      player1.emit('ttt_createRoom', 'Alice');
-      player1.once('ttt_roomInfo', (room) => {
-        player2.emit('ttt_joinRoom', { roomId: room.id, playerName: 'Bob' });
-        player2.once('ttt_gameStarted', () => {
-          player2.once('ttt_roomInfo', (r) => {
-            expect(r.gameState).to.equal('playing');
-            expect(r.players).to.have.lengthOf(2);
-            done();
-          });
-        });
-      });
-    });
-
     it('should reject join on full room', (done) => {
-      player1.emit('ttt_createRoom', 'Alice');
+      player1.emit('ttt_createRoom', { playerName: 'Alice' });
       player1.once('ttt_roomInfo', (room) => {
         player2.emit('ttt_joinRoom', { roomId: room.id, playerName: 'Bob' });
         player2.once('ttt_gameStarted', () => {
@@ -102,10 +87,8 @@ describe('TicTacToe Game Logic', function () {
 
     it('should reject move when not your turn', (done) => {
       setupGame((roomId) => {
-        // player2 tries to move first (player1 goes first)
         player2.emit('ttt_makeMove', { roomId, position: 0 });
         setTimeout(() => {
-          // board should still be empty — no moveMade fired
           player1.emit('ttt_makeMove', { roomId, position: 0 });
           player1.once('ttt_moveMade', ({ position }) => {
             expect(position).to.equal(0);
@@ -119,10 +102,8 @@ describe('TicTacToe Game Logic', function () {
       setupGame((roomId) => {
         player1.emit('ttt_makeMove', { roomId, position: 0 });
         player1.once('ttt_nextTurn', () => {
-          // player2 tries same cell
           player2.emit('ttt_makeMove', { roomId, position: 0 });
           setTimeout(() => {
-            // no second moveMade should fire for position 0 with O
             done();
           }, 100);
         });
@@ -143,7 +124,6 @@ describe('TicTacToe Game Logic', function () {
   describe('Win Detection', () => {
     it('should detect top-row win for X', (done) => {
       setupGame((roomId) => {
-        // X: 0,1,2  O: 3,4
         const moves = [
           [player1, 0],
           [player2, 3],

@@ -13,13 +13,31 @@ export const useGameContext = () => {
 };
 
 export const GameProvider = ({ children }) => {
-  const [playerName, setPlayerName] = useState(localStorage.getItem('playerName') || '');
+  const [playerName, setPlayerName] = useState('');
+  const [profile, setProfile] = useState(() => {
+    const saved = localStorage.getItem('playerProfile');
+    return saved
+      ? JSON.parse(saved)
+      : {
+          name: '',
+          avatarIcon: 'cat',
+          color: '#2a2a3e',
+        };
+  });
   const [roomId, setRoomId] = useState(null);
   const [socket, setSocket] = useState(null);
   const socketRef = useRef(null);
 
   useEffect(() => {
-    // Use window.location.hostname for host so it works when served from any IP
+    const savedName = localStorage.getItem('playerName');
+    if (savedName) setPlayerName(savedName);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('playerProfile', JSON.stringify(profile));
+  }, [profile]);
+
+  useEffect(() => {
     const host = window.location.hostname || 'localhost';
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const port = import.meta.env.VITE_PORT || 4000;
@@ -64,9 +82,16 @@ export const GameProvider = ({ children }) => {
     }
   };
 
+  const setPlayerProfileName = (name) => {
+    setProfile((prev) => ({ ...prev, name }));
+    setPlayerName(name);
+  };
+
   const value = {
     playerName,
-    setPlayerName,
+    setPlayerName: setPlayerProfileName,
+    profile,
+    setProfile,
     roomId,
     setRoomId,
     clearRoomId,

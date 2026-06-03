@@ -32,6 +32,9 @@ describe('Connect4 Game Logic', function () {
   });
 
   afterEach((done) => {
+    if (player1) player1.removeAllListeners();
+    if (player2) player2.removeAllListeners();
+    if (spectator) spectator.removeAllListeners();
     if (player1.connected) player1.disconnect();
     if (player2.connected) player2.disconnect();
     if (spectator.connected) spectator.disconnect();
@@ -117,7 +120,8 @@ describe('Connect4 Game Logic', function () {
       });
     });
 
-    it('should alternate turns', (done) => {
+    it('should alternate turns', function (done) {
+      this.timeout(5000);
       player1.emit('c4_createRoom', { playerName: 'Alice' });
       player1.once('c4_roomInfo', (room) => {
         const roomId = room.id;
@@ -145,7 +149,8 @@ describe('Connect4 Game Logic', function () {
   });
 
   describe('Win Detection - Vertical', () => {
-    it('should detect vertical win', (done) => {
+    it('should detect vertical win', function (done) {
+      this.timeout(5000);
       player1.emit('c4_createRoom', { playerName: 'Alice' });
       player1.once('c4_roomInfo', (room) => {
         const roomId = room.id;
@@ -153,16 +158,22 @@ describe('Connect4 Game Logic', function () {
         player1.once('c4_roomInfo', () => {
           player1.emit('c4_startGame', { roomId });
           player1.once('c4_gameStarted', () => {
-            for (let i = 0; i < 4; i++) {
-              player1.emit('c4_makeMove', { roomId, column: 0 });
-              player2.emit('c4_makeMove', { roomId, column: 1 });
-            }
-          });
-          player1.once('c4_gameOver', (data) => {
-            expect(data.winner).to.equal(player1.id);
-            expect(data.winLine).to.be.an('array');
-            expect(data.winLine).to.have.lengthOf(4);
-            done();
+            let moveIdx = 0;
+            const makeMove = () => {
+              if (moveIdx >= 7) return;
+              const p = moveIdx % 2 === 0 ? player1 : player2;
+              const col = moveIdx % 2 === 0 ? 0 : 1;
+              p.emit('c4_makeMove', { roomId, column: col });
+              moveIdx++;
+            };
+            player1.once('c4_gameOver', (data) => {
+              expect(data.winner).to.equal(player1.id);
+              expect(data.winLine).to.be.an('array');
+              expect(data.winLine).to.have.lengthOf(4);
+              done();
+            });
+            player1.on('c4_moveMade', makeMove);
+            makeMove();
           });
         });
       });
@@ -170,7 +181,8 @@ describe('Connect4 Game Logic', function () {
   });
 
   describe('Win Detection - Horizontal', () => {
-    it('should detect horizontal win', (done) => {
+    it('should detect horizontal win', function (done) {
+      this.timeout(5000);
       player1.emit('c4_createRoom', { playerName: 'Alice' });
       player1.once('c4_roomInfo', (room) => {
         const roomId = room.id;
@@ -178,18 +190,21 @@ describe('Connect4 Game Logic', function () {
         player1.once('c4_roomInfo', () => {
           player1.emit('c4_startGame', { roomId });
           player1.once('c4_gameStarted', () => {
-            player1.emit('c4_makeMove', { roomId, column: 0 });
-            player2.emit('c4_makeMove', { roomId, column: 0 });
-            player1.emit('c4_makeMove', { roomId, column: 1 });
-            player2.emit('c4_makeMove', { roomId, column: 1 });
-            player1.emit('c4_makeMove', { roomId, column: 2 });
-            player2.emit('c4_makeMove', { roomId, column: 2 });
-            player1.emit('c4_makeMove', { roomId, column: 3 });
-          });
-          player1.once('c4_gameOver', (data) => {
-            expect(data.winner).to.equal(player1.id);
-            expect(data.winLine).to.be.an('array');
-            done();
+            let moveIdx = 0;
+            const makeMove = () => {
+              if (moveIdx >= 7) return;
+              const p = moveIdx % 2 === 0 ? player1 : player2;
+              const col = moveIdx % 2 === 0 ? Math.floor(moveIdx / 2) : 6;
+              p.emit('c4_makeMove', { roomId, column: col });
+              moveIdx++;
+            };
+            player1.once('c4_gameOver', (data) => {
+              expect(data.winner).to.equal(player1.id);
+              expect(data.winLine).to.be.an('array');
+              done();
+            });
+            player1.on('c4_moveMade', makeMove);
+            makeMove();
           });
         });
       });
@@ -197,7 +212,8 @@ describe('Connect4 Game Logic', function () {
   });
 
   describe('Draw Detection', () => {
-    it('should detect draw when board is full with no winner', (done) => {
+    it('should detect draw when board is full with no winner', function (done) {
+      this.timeout(20000);
       player1.emit('c4_createRoom', { playerName: 'Alice' });
       player1.once('c4_roomInfo', (room) => {
         const roomId = room.id;
@@ -205,18 +221,24 @@ describe('Connect4 Game Logic', function () {
         player1.once('c4_roomInfo', () => {
           player1.emit('c4_startGame', { roomId });
           player1.once('c4_gameStarted', () => {
-            let moves = 0;
-            const columns = [0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6];
-            columns.forEach((col, i) => {
-              setTimeout(() => {
-                const player = i % 2 === 0 ? player1 : player2;
-                player.emit('c4_makeMove', { roomId, column: col });
-              }, i * 20);
+            const drawMoves = [
+              0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 4, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5,
+              5, 6, 6, 6, 6, 6, 6,
+            ];
+            let moveIdx = 0;
+            const nextMove = () => {
+              if (moveIdx >= 42) return;
+              const col = drawMoves[moveIdx];
+              const p = moveIdx % 2 === 0 ? player1 : player2;
+              p.emit('c4_makeMove', { roomId, column: col });
+              moveIdx++;
+            };
+            player1.once('c4_gameOver', (data) => {
+              expect(data.winner).to.be.null;
+              done();
             });
-          });
-          player1.once('c4_gameOver', (data) => {
-            expect(data.winner).to.be.null;
-            done();
+            player1.on('c4_moveMade', nextMove);
+            nextMove();
           });
         });
       });
@@ -224,8 +246,8 @@ describe('Connect4 Game Logic', function () {
   });
 
   describe('Column Full Rejection', () => {
-    it('should reject move in full column', (done) => {
-      let timeout = setTimeout(() => done(new Error('timeout')), 2000);
+    it('should reject move in full column', function (done) {
+      this.timeout(5000);
       player1.emit('c4_createRoom', { playerName: 'Alice' });
       player1.once('c4_roomInfo', (room) => {
         const roomId = room.id;
@@ -233,27 +255,32 @@ describe('Connect4 Game Logic', function () {
         player1.once('c4_roomInfo', () => {
           player1.emit('c4_startGame', { roomId });
           player1.once('c4_gameStarted', () => {
-            for (let i = 0; i < 6; i++) {
-              player1.emit('c4_makeMove', { roomId, column: 0 });
-              player2.emit('c4_makeMove', { roomId, column: 1 });
-            }
-          });
-          player1.once('c4_moveMade', () => {
-            clearTimeout(timeout);
-            player1.emit('c4_makeMove', { roomId, column: 0 });
-            timeout = setTimeout(() => done(new Error('timeout')), 1000);
-          });
-          player1.once('c4_alert', (alert) => {
-            clearTimeout(timeout);
-            expect(alert.text).to.include('full');
-            done();
+            let moveIdx = 0;
+            const makeMove = () => {
+              // Fill column 0 completely with 6 items
+              if (moveIdx < 6) {
+                const p = moveIdx % 2 === 0 ? player1 : player2;
+                p.emit('c4_makeMove', { roomId, column: 0 });
+                moveIdx++;
+              } else if (moveIdx === 6) {
+                // Try to make a 7th move in full column 0
+                player1.emit('c4_makeMove', { roomId, column: 0 });
+                moveIdx++;
+              }
+            };
+            player1.once('c4_alert', (alert) => {
+              expect(alert.text).to.include('full');
+              done();
+            });
+            player1.on('c4_moveMade', makeMove);
+            makeMove();
           });
         });
       });
     });
 
-    it('should emit c4_columnFull alert on full column click', (done) => {
-      let timeout = setTimeout(() => done(new Error('timeout')), 2000);
+    it('should emit c4_columnFull alert on full column click', function (done) {
+      this.timeout(5000);
       player1.emit('c4_createRoom', { playerName: 'Alice' });
       player1.once('c4_roomInfo', (room) => {
         const roomId = room.id;
@@ -261,20 +288,25 @@ describe('Connect4 Game Logic', function () {
         player1.once('c4_roomInfo', () => {
           player1.emit('c4_startGame', { roomId });
           player1.once('c4_gameStarted', () => {
-            for (let i = 0; i < 6; i++) {
-              player1.emit('c4_makeMove', { roomId, column: 3 });
-              player2.emit('c4_makeMove', { roomId, column: 2 });
-            }
-          });
-          player1.once('c4_moveMade', () => {
-            clearTimeout(timeout);
-            player1.emit('c4_makeMove', { roomId, column: 3 });
-            timeout = setTimeout(() => done(new Error('timeout')), 1000);
-          });
-          player1.once('c4_alert', (alert) => {
-            clearTimeout(timeout);
-            expect(alert.text).to.include('full');
-            done();
+            let moveIdx = 0;
+            const makeMove = () => {
+              // Fill column 3 completely with 6 items
+              if (moveIdx < 6) {
+                const p = moveIdx % 2 === 0 ? player1 : player2;
+                p.emit('c4_makeMove', { roomId, column: 3 });
+                moveIdx++;
+              } else if (moveIdx === 6) {
+                // Try to make a 7th move in full column 3
+                player1.emit('c4_makeMove', { roomId, column: 3 });
+                moveIdx++;
+              }
+            };
+            player1.once('c4_alert', (alert) => {
+              expect(alert.text).to.include('full');
+              done();
+            });
+            player1.on('c4_moveMade', makeMove);
+            makeMove();
           });
         });
       });

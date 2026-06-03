@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useGameContext } from '../context/GameContext';
 import { useNavigate } from 'react-router-dom';
 import GameLayout from '../components/ui/GameLayout';
@@ -7,18 +7,21 @@ import MatchReport from '../components/ui/MatchReport';
 import SketchButton from '../components/ui/SketchButton';
 import TurnIndicator from '../components/ui/TurnIndicator';
 import Swal from 'sweetalert2';
-
 const SOSGame = () => {
-  const { socket, playerName, setPlayerName, clearRoomId } = useGameContext();
+  const { socket, playerName, clearRoomId, profile, setProfile } = useGameContext();
   const navigate = useNavigate();
   const [gameState, setGameState] = useState('lobby');
   const [room, setRoom] = useState(null);
   const [selectedSymbol, setSelectedSymbol] = useState('S');
   const [flashCells, setFlashCells] = useState([]);
+  const reconnectAttempted = useRef(false);
 
   useEffect(() => {
+    if (!socket) return;
+
     const saved = sessionStorage.getItem('sos_reconnect');
-    if (saved && socket) {
+    if (saved && !reconnectAttempted.current) {
+      reconnectAttempted.current = true;
       const data = JSON.parse(saved);
       socket.emit('sos_reconnect', data);
     }
@@ -32,11 +35,12 @@ const SOSGame = () => {
       if (data.gameState === 'playing') {
         setGameState('playing');
       }
+      const myPlayer = data.players?.find((p) => p.id === socket.id);
       sessionStorage.setItem(
         'sos_reconnect',
         JSON.stringify({
           roomId: data.id,
-          playerId: data.players?.find((p) => p.name === playerName)?.id || socket.id,
+          playerId: myPlayer?.id || socket.id,
         }),
       );
     });
@@ -84,16 +88,27 @@ const SOSGame = () => {
       socket.off('sos_gameRestarted');
       socket.off('sos_alert');
     };
-  }, [socket, playerName]);
+  }, [socket]);
 
   const handleCreateRoom = (size) => {
-    if (!socket || !playerName) return;
-    socket.emit('sos_createRoom', { playerName, size });
+    if (!socket) return;
+    socket.emit('sos_createRoom', {
+      playerName: profile.name || playerName,
+      avatarIcon: profile.avatarIcon,
+      color: profile.color,
+      size,
+    });
   };
 
   const handleJoinRoom = (roomIdToJoin, asSpectator) => {
-    if (!socket || !playerName) return;
-    socket.emit('sos_joinRoom', { roomId: roomIdToJoin, playerName, asSpectator });
+    if (!socket) return;
+    socket.emit('sos_joinRoom', {
+      roomId: roomIdToJoin,
+      playerName: profile.name || playerName,
+      avatarIcon: profile.avatarIcon,
+      color: profile.color,
+      asSpectator,
+    });
   };
 
   const handleStartGame = () => {
@@ -118,19 +133,19 @@ const SOSGame = () => {
 
   const handleCellClick = (row, col) => {
     if (!room || gameState !== 'playing') return;
-    const myPlayerIndex = room.players.findIndex((p) => p.name === playerName);
-    if (myPlayerIndex === -1 && !room.spectators?.find((s) => s.name === playerName)) return;
+    const myPlayerIndex = room.players.findIndex((p) => p.id === socket.id);
+    if (myPlayerIndex === -1 && !room.spectators?.find((s) => s.id === socket.id)) return;
     if (myPlayerIndex !== room.currentTurn) return;
     if (room.board[row][col] !== null) return;
 
     socket.emit('sos_makeMove', { roomId: room.id, row, col, value: selectedSymbol });
   };
 
-  const isSpectator = room?.spectators?.some((s) => s.name === playerName);
-  const isHost = room && room.creator === (room.players.find((p) => p.name === playerName)?.id || '');
+  const isSpectator = room?.spectators?.some((s) => s.id === socket.id);
+  const isHost = room && room.creator === socket.id;
 
   if (gameState === 'ended' && room) {
-    const myPlayer = room.players.find((p) => p.name === playerName);
+    const myPlayer = room.players.find((p) => p.id === socket.id);
     const isWinner = room.winner === myPlayer?.id;
     return (
       <MatchReport
@@ -184,7 +199,7 @@ const SOSGame = () => {
                   <button
                     key={`${r}-${c}`}
                     onClick={() => handleCellClick(r, c)}
-                    disabled={room.currentTurn !== room.players.findIndex((p) => p.name === playerName)}
+                    disabled={room.currentTurn !== room.players.findIndex((p) => p.id === socket.id)}
                     className={`w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center text-2xl font-sketch border-2 border-ink/20 hover:bg-paper-dark rounded sketch-transition ${
                       isFlashing ? 'bg-yellow-200' : ''
                     }`}
@@ -230,8 +245,8 @@ const SOSGame = () => {
           <label className="paper-font text-sm text-ink/60">Your Name</label>
           <input
             type="text"
-            value={playerName}
-            onChange={(e) => setPlayerName(e.target.value)}
+            value={profile.name}
+            onChange={(e) => setProfile({ ...profile, name: e.target.value })}
             placeholder="Enter name"
             className="sketch-input w-full mt-1"
             maxLength={20}

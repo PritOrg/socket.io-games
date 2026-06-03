@@ -1,33 +1,33 @@
 import React from 'react';
 import InnerGrid from './InnerGrid';
 
+const getContainerClasses = () => {
+  const base = 'relative rounded-xl transition-all duration-300 shadow-lg';
+  return `${base} bg-white/95 border-2 border-gray-800/10`;
+};
+
+const renderGridLines = () => (
+  <>
+    <div
+      className="absolute left-0 w-full h-px bg-gradient-to-r from-transparent via-gray-400/40 to-transparent"
+      style={{ top: 'calc(33.333% - 0.5px)', boxShadow: '0 0.5px 0 rgba(0,0,0,0.05)' }}
+    />
+    <div
+      className="absolute left-0 w-full h-px bg-gradient-to-r from-transparent via-gray-400/40 to-transparent"
+      style={{ top: 'calc(66.666% - 0.5px)', boxShadow: '0 0.5px 0 rgba(0,0,0,0.05)' }}
+    />
+    <div
+      className="absolute top-0 h-full w-px bg-gradient-to-b from-transparent via-gray-400/40 to-transparent"
+      style={{ left: 'calc(33.333% - 0.5px)', boxShadow: '0.5px 0 0 rgba(0,0,0,0.05)' }}
+    />
+    <div
+      className="absolute top-0 h-full w-px bg-gradient-to-b from-transparent via-gray-400/40 to-transparent"
+      style={{ left: 'calc(66.666% - 0.5px)', boxShadow: '0.5px 0 0 rgba(0,0,0,0.05)' }}
+    />
+  </>
+);
+
 const MacroGrid = ({ board, macroBoard, activeGrid, lastMove, onCellClick }) => {
-  const getContainerClasses = () => {
-    let base = 'relative rounded-xl transition-all duration-300 shadow-lg';
-    return `${base} bg-white/95 border-2 border-gray-800/10`;
-  };
-
-  const renderGridLines = () => (
-    <>
-      <div
-        className="absolute left-0 w-full h-px bg-gradient-to-r from-transparent via-gray-400/40 to-transparent"
-        style={{ top: 'calc(33.333% - 0.5px)', boxShadow: '0 0.5px 0 rgba(0,0,0,0.05)' }}
-      />
-      <div
-        className="absolute left-0 w-full h-px bg-gradient-to-r from-transparent via-gray-400/40 to-transparent"
-        style={{ top: 'calc(66.666% - 0.5px)', boxShadow: '0 0.5px 0 rgba(0,0,0,0.05)' }}
-      />
-      <div
-        className="absolute top-0 h-full w-px bg-gradient-to-b from-transparent via-gray-400/40 to-transparent"
-        style={{ left: 'calc(33.333% - 0.5px)', boxShadow: '0.5px 0 0 rgba(0,0,0,0.05)' }}
-      />
-      <div
-        className="absolute top-0 h-full w-px bg-gradient-to-b from-transparent via-gray-400/40 to-transparent"
-        style={{ left: 'calc(66.666% - 0.5px)', boxShadow: '0.5px 0 0 rgba(0,0,0,0.05)' }}
-      />
-    </>
-  );
-
   return (
     <div className={`${getContainerClasses()} p-1.5 sm:p-2 md:p-3 overflow-hidden`}>
       <div className="relative grid grid-cols-3 gap-1 sm:gap-1.5 md:gap-2">
