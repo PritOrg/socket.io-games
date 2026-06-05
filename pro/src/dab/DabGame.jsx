@@ -74,6 +74,8 @@ const DabGame = () => {
       customCols,
       customPlayers,
       playerName: profile.name || playerName,
+      avatarIcon: profile.avatarIcon,
+      color: profile.color,
     });
   }, [mode, customRows, customCols, customPlayers, playerName, socket, profile]);
 
@@ -89,6 +91,8 @@ const DabGame = () => {
       socket.emit('dab_joinRoom', {
         roomId: joinRoomId.toUpperCase(),
         playerName: profile.name || playerName,
+        avatarIcon: profile.avatarIcon,
+        color: profile.color,
       });
     }
   }, [socket, profile, playerName]);

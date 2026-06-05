@@ -82,8 +82,7 @@ class DabManager extends BaseManager {
       lastClaimedBox: null,
       redoRequest: null,
       redoRequestTimer: null,
-      emptyTimer: null,
-      forfeitTimer: null,
+
       maxPlayers,
       startedWithPlayers: maxPlayers,
     };

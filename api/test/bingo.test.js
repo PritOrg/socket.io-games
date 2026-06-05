@@ -270,9 +270,8 @@ describe('Bingo Game Logic', function () {
 
         player2.once('bingo_roomInfo', () => {
           setTimeout(() => {
-            player1.once('bingo_playerLeft', (leftPlayerId) => {
-              // Check that some player left (not undefined/null)
-              expect(leftPlayerId).to.be.a('string');
+            player1.once('bingo_playerLeft', ({ playerId }) => {
+              expect(playerId).to.be.a('string');
               done();
             });
             player2.disconnect();

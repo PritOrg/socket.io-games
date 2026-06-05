@@ -148,6 +148,7 @@ const Bingo = () => {
     socket.on('bingo_gameRestarted', () => {
       setGameState('ready');
       setStrikedOut('');
+      sessionStorage.removeItem('bingo_reconnect');
       setNumbers((prev) => {
         const fresh = prev.map((n) => (typeof n === 'number' ? n : n));
         localStorage.setItem(`bingo_board_${roomId}`, JSON.stringify(fresh));
@@ -163,7 +164,7 @@ const Bingo = () => {
     });
 
     socket.on('bingo_numberMarked', ({ number, nextTurn, strikedNumbers }) => {
-      setNumbers((prev) => prev.map((n) => (strikedNumbers.includes(n) ? 'X' : typeof n === 'string' ? n : n)));
+      setNumbers((prev) => prev.map((n) => (strikedNumbers.includes(n) ? 'X' : n)));
       setCurrentTurn(nextTurn);
       playPop();
     });

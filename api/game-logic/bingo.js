@@ -419,7 +419,7 @@ class BingoManager extends BaseManager {
               this.rooms.delete(roomId);
             } else {
               if (room.creator === socket.id) room.creator = room.players[0].id;
-              this.io.to(roomId).emit(`${this.gamePrefix}_playerLeft`, socket.id);
+              this.io.to(roomId).emit(`${this.gamePrefix}_playerLeft`, { playerId: socket.id });
               this.sendRoomInfo(roomId);
             }
           },

@@ -279,7 +279,7 @@ const SOSGame = () => {
             placeholder="Room Code"
             className="sketch-input w-full mt-1 mb-2"
             maxLength={6}
-            onKeyPress={(e) => {
+            onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 const roomId = e.target.value.trim();
                 if (roomId && playerName) handleJoinRoom(roomId);

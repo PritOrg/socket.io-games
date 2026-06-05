@@ -359,8 +359,11 @@ describe('Dots & Boxes (DAB) Game Logic', function () {
 
       await makeMove(player1, roomId, 'h', 0, 0);
 
+      const playerLeftPromise = new Promise((resolve) => {
+        player1.once('dab_playerLeft', ({ playerId }) => resolve(playerId));
+      });
       player2.disconnect();
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await playerLeftPromise;
 
       const result = await makeMove(player3, roomId, 'h', 0, 1);
       expect(result.currentTurn).to.equal(0);

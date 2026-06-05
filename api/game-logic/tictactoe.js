@@ -58,8 +58,6 @@ class TicTacToeManager extends BaseManager {
       board: Array(9).fill(null),
       gameState: 'waiting',
       currentTurn: null,
-      emptyTimer: null,
-      forfeitTimer: null,
     };
     this.rooms.set(roomId, room);
     this._trackSocket(socket.id, roomId);
