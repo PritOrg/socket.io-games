@@ -17,6 +17,9 @@ class TicTacToeManager extends BaseManager {
       const sanitized = this.sanitizeRoomId(roomId);
       if (sanitized) this.sendRoomInfo(sanitized);
     });
+    socket.on('server_shutdown', () => {
+      this.clearAllTimersForRoom(socket.id);
+    });
     socket.on('disconnect', () => this.handleDisconnect(socket));
   }
 
@@ -46,6 +49,7 @@ class TicTacToeManager extends BaseManager {
     socket.join(roomId);
     const room = {
       id: roomId,
+      creator: socket.id,
       players: [
         {
           id: socket.id,
@@ -55,6 +59,7 @@ class TicTacToeManager extends BaseManager {
           connected: true,
         },
       ],
+      settings: {},
       board: Array(9).fill(null),
       gameState: 'waiting',
       currentTurn: null,
@@ -100,13 +105,14 @@ class TicTacToeManager extends BaseManager {
     const room = this.rooms.get(sanitizedRoomId);
     if (!room || room.gameState !== 'playing' || room.currentTurn !== socket.id) return;
 
-    const playerIndex = room.players.findIndex((p) => p.id === socket.id);
-    const symbol = playerIndex === 0 ? 'X' : 'O';
-
     if (position < 0 || position > 8) return;
     if (room.board[position] === null) {
+      const playerIndex = room.players.findIndex((p) => p.id === socket.id);
+      const symbol = playerIndex === 0 ? 'X' : 'O';
       room.board[position] = symbol;
-      this.io.to(sanitizedRoomId).emit(`${this.gamePrefix}_moveMade`, { position, symbol, board: room.board });
+      this.io
+        .to(sanitizedRoomId)
+        .emit(`${this.gamePrefix}_moveMade`, { position, symbol, board: room.board, lastMove: { position, symbol } });
 
       const result = this.checkWinner(room.board);
       if (result) {
@@ -120,7 +126,7 @@ class TicTacToeManager extends BaseManager {
         }
       } else {
         room.currentTurn = room.players.find((p) => p.id !== socket.id).id;
-        this.io.to(sanitizedRoomId).emit(`${this.gamePrefix}_nextTurn`, room.currentTurn);
+        this.io.to(sanitizedRoomId).emit(`${this.gamePrefix}_nextTurn`, { nextPlayerId: room.currentTurn });
       }
     }
   }
@@ -129,6 +135,8 @@ class TicTacToeManager extends BaseManager {
     const roomIdSanitized = this.sanitizeRoomId(roomId);
     const room = this.rooms.get(roomIdSanitized);
     if (!room) return;
+    const creator = room.creator || room.players[0]?.id;
+    if (creator !== socket.id) return;
     room.board = Array(9).fill(null);
     room.gameState = 'playing';
     room.currentTurn = room.players[0].id;
@@ -204,6 +212,8 @@ class TicTacToeManager extends BaseManager {
           text: 'Game resumed!',
         });
       }
+
+      // Note: forfeit_${roomId} timer is never registered in this manager; clearTimer is a no-op pending forfeit feature
     }
 
     this.sendRoomInfo(room.id);
@@ -243,7 +253,14 @@ class TicTacToeManager extends BaseManager {
 
   sendRoomInfo(roomId) {
     const room = this.rooms.get(roomId);
-    if (room) this.io.to(roomId).emit(`${this.gamePrefix}_roomInfo`, room);
+    if (!room) return;
+    const cleanRoom = {
+      ...room,
+      turnTimer: undefined,
+      forfeitTimer: undefined,
+      emptyTimer: undefined,
+    };
+    this.io.to(roomId).emit(`${this.gamePrefix}_roomInfo`, cleanRoom);
   }
 }
 

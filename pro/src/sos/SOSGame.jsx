@@ -8,16 +8,20 @@ import SketchButton from '../components/ui/SketchButton';
 import TurnIndicator from '../components/ui/TurnIndicator';
 import Swal from 'sweetalert2';
 const SOSGame = () => {
-  const { socket, playerName, clearRoomId, profile, setProfile } = useGameContext();
+  const { socket, playerName, clearRoomId, setGamePrefix, profile, setProfile } = useGameContext();
   const navigate = useNavigate();
   const [gameState, setGameState] = useState('lobby');
   const [room, setRoom] = useState(null);
   const [selectedSymbol, setSelectedSymbol] = useState('S');
   const [flashCells, setFlashCells] = useState([]);
+  const [desiredSize, setDesiredSize] = useState(6);
+  const joinRoomIdRef = useRef('');
   const reconnectAttempted = useRef(false);
 
   useEffect(() => {
     if (!socket) return;
+
+    setGamePrefix('sos');
 
     const saved = sessionStorage.getItem('sos_reconnect');
     if (saved && !reconnectAttempted.current) {
@@ -25,7 +29,7 @@ const SOSGame = () => {
       const data = JSON.parse(saved);
       socket.emit('sos_reconnect', data);
     }
-  }, [socket]);
+  }, [socket, setGamePrefix]);
 
   useEffect(() => {
     if (!socket) return;
@@ -175,7 +179,7 @@ const SOSGame = () => {
 
   if (room && gameState === 'playing') {
     return (
-      <GameLayout>
+      <GameLayout players={room.players}>
         <div className="flex flex-col items-center gap-4 p-4">
           {isSpectator && (
             <div className="sketch-card px-4 py-2 bg-blue-100">
@@ -257,8 +261,8 @@ const SOSGame = () => {
           <label className="paper-font text-sm text-ink/60">Board Size</label>
           <select
             className="sketch-input w-full mt-1"
-            defaultValue={6}
-            onChange={(e) => handleCreateRoom(Number(e.target.value))}
+            value={desiredSize}
+            onChange={(e) => setDesiredSize(Number(e.target.value))}
           >
             <option value={4}>4x4 (Quick)</option>
             <option value={5}>5x5</option>
@@ -268,7 +272,7 @@ const SOSGame = () => {
           </select>
         </div>
 
-        <SketchButton onClick={() => handleCreateRoom(6)} className="w-full">
+        <SketchButton onClick={() => handleCreateRoom(desiredSize)} className="w-full">
           Create Room
         </SketchButton>
 
@@ -279,26 +283,27 @@ const SOSGame = () => {
             placeholder="Room Code"
             className="sketch-input w-full mt-1 mb-2"
             maxLength={6}
+            ref={joinRoomIdRef}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 const roomId = e.target.value.trim();
-                if (roomId && playerName) handleJoinRoom(roomId);
+                if (roomId && profile.name) handleJoinRoom(roomId);
               }
             }}
           />
           <SketchButton
-            onClick={(e) => {
-              const roomIdInput = e.target.previousElementSibling;
-              if (roomIdInput?.value && playerName) handleJoinRoom(roomIdInput.value.trim());
+            onClick={() => {
+              const roomIdInput = joinRoomIdRef.current?.value || '';
+              if (roomIdInput && profile.name) handleJoinRoom(roomIdInput.trim());
             }}
             className="w-full"
           >
             Join as Player
           </SketchButton>
           <SketchButton
-            onClick={(e) => {
-              const roomIdInput = e.target.previousElementSibling.previousElementSibling;
-              if (roomIdInput?.value && playerName) handleJoinRoom(roomIdInput.value.trim(), true);
+            onClick={() => {
+              const roomIdInput = joinRoomIdRef.current?.value || '';
+              if (roomIdInput && profile.name) handleJoinRoom(roomIdInput.trim(), true);
             }}
             className="w-full mt-2"
             style={{ background: '#f0f8ff' }}

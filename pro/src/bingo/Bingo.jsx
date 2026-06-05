@@ -19,7 +19,7 @@ import logger from '../utils/logger';
 const PLAYER_COLORS = ['#2a2a3e', '#c73e1d', '#2d4a8f', '#2f5233'];
 
 const Bingo = () => {
-  const { socket, roomId, setRoomId, clearRoomId, profile, setProfile } = useGameContext();
+  const { socket, roomId, setRoomId, clearRoomId, profile, setProfile, setGamePrefix } = useGameContext();
   const [numbers, setNumbers] = useState(Array.from({ length: 25 }, (_, i) => i + 1));
   const [players, setPlayers] = useState([]);
   const [gameState, setGameState] = useState('waiting');
@@ -75,15 +75,26 @@ const Bingo = () => {
   useEffect(() => {
     if (!socket) return;
 
+    setGamePrefix('bingo');
+
     const saved = sessionStorage.getItem('bingo_reconnect');
-    if (saved && !roomId) {
+    const hasSavedReconnect = saved && !roomId;
+    if (hasSavedReconnect) {
       const { roomId: savedRoomId, playerId } = JSON.parse(saved);
       logger.socket('➡️', 'bingo_reconnect', { roomId: savedRoomId, playerId });
       socket.emit('bingo_reconnect', { roomId: savedRoomId, playerId });
       setRoomId(savedRoomId);
     }
 
+    let roomLoaded = false;
+
+    // recovery: emit requestRoomInfo if roomId exists but we haven't received roomInfo yet
+    if (roomId && !hasSavedReconnect) {
+      socket.emit('bingo_requestRoomInfo', roomId);
+    }
+
     socket.on('bingo_roomInfo', ({ id, creator, players, gameState, currentTurn, strikedNumbers }) => {
+      roomLoaded = true;
       logger.socket('⬅️', 'bingo_roomInfo', { roomId: id, gameState });
       setRoomId(id);
       setPlayers(players);
@@ -163,7 +174,7 @@ const Bingo = () => {
       });
     });
 
-    socket.on('bingo_numberMarked', ({ number, nextTurn, strikedNumbers }) => {
+    socket.on('bingo_numberMarked', ({ nextTurn, strikedNumbers }) => {
       setNumbers((prev) => prev.map((n) => (strikedNumbers.includes(n) ? 'X' : n)));
       setCurrentTurn(nextTurn);
       playPop();
@@ -178,16 +189,16 @@ const Bingo = () => {
       }
     });
 
-    socket.on('bingo_playerWon', (winnerId) => {
+    socket.on('bingo_playerWon', ({ winner }) => {
       playWin();
-      const playerColor = players.find((p) => p.id === winnerId)?.color || '#2a2a3e';
+      const playerColor = players.find((p) => p.id === winner)?.color || '#2a2a3e';
       confetti({
         particleCount: 150,
         spread: 70,
         origin: { y: 0.6 },
         colors: [playerColor],
       });
-      const winnerName = players.find((p) => p.id === winnerId)?.name || 'Someone';
+      const winnerName = players.find((p) => p.id === winner)?.name || 'Someone';
       Swal.fire({
         title: 'BINGO!',
         text: `${winnerName} has achieved Bingo!`,
@@ -227,6 +238,19 @@ const Bingo = () => {
       }
     });
 
+    socket.on('server_shutdown', ({ message }) => {
+      Swal.fire({
+        title: 'Server Shutting Down',
+        text: message || 'The server is going down for maintenance.',
+        icon: 'info',
+        customClass: { popup: sketchPopupClass },
+      }).then(() => {
+        sessionStorage.removeItem('bingo_reconnect');
+        clearRoomId(roomId);
+        navigate('/');
+      });
+    });
+
     return () => {
       socket.off('bingo_roomInfo');
       socket.off('bingo_playerBoard');
@@ -238,8 +262,9 @@ const Bingo = () => {
       socket.off('bingo_playerLeft');
       socket.off('bingo_gamePaused');
       socket.off('bingo_alert');
+      socket.off('server_shutdown');
     };
-  }, [socket, roomId, playPop, playWin, playTurn, generateBoard, players]);
+  }, [socket, roomId, playPop, playWin, playTurn, generateBoard, players, setGamePrefix, clearRoomId, navigate]);
 
   useEffect(() => {
     if (gameState !== 'playing' || numbers.length !== 25) return;
@@ -318,7 +343,7 @@ const Bingo = () => {
   };
 
   return (
-    <GameLayout socket={socket} roomId={roomId} gamePrefix="bingo" players={players}>
+    <GameLayout players={players}>
       <div className="flex flex-col items-center justify-center p-4 w-full">
         <h1 className="text-6xl font-sketch mb-8 text-ink">Bingo Party</h1>
 

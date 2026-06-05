@@ -113,8 +113,8 @@ describe('TicTacToe Game Logic', function () {
     it('should advance turn after valid move', (done) => {
       setupGame((roomId) => {
         player1.emit('ttt_makeMove', { roomId, position: 0 });
-        player1.once('ttt_nextTurn', (nextId) => {
-          expect(nextId).to.equal(player2.id);
+        player1.once('ttt_nextTurn', (data) => {
+          expect(data.nextPlayerId).to.equal(player2.id);
           done();
         });
       });

@@ -82,8 +82,8 @@ const TicTacToe = () => {
       if (lastMove) setLastMove(lastMove);
     });
 
-    socket.on('ttt_nextTurn', (playerId) => {
-      setCurrentTurn(playerId);
+    socket.on('ttt_nextTurn', ({ nextPlayerId }) => {
+      setCurrentTurn(nextPlayerId);
     });
 
     socket.on('ttt_gameWon', ({ winningLine }) => {
@@ -209,7 +209,7 @@ const TicTacToe = () => {
     <SketchCard className="p-3 sm:p-6">
       <div className="grid grid-cols-3 gap-1 sm:gap-2 w-48 sm:w-64 md:w-80">
         {board.map((cell, i) => {
-          const isLastMoveCell = lastMove && lastMove.cellIndex === i;
+          const isLastMoveCell = lastMove && lastMove.position === i;
           return (
             <button
               key={i}
@@ -234,7 +234,7 @@ const TicTacToe = () => {
   );
 
   return (
-    <GameLayout socket={socket} roomId={roomId} gamePrefix="ttt" players={players}>
+    <GameLayout players={players}>
       <div className="flex flex-col items-center justify-center p-2 sm:p-4 w-full">
         <h1 className="text-3xl sm:text-5xl md:text-6xl font-sketch mb-4 sm:mb-8 text-ink">Tic Tac Toe</h1>
 
@@ -280,11 +280,9 @@ const TicTacToe = () => {
               </div>
             </SketchCard>
 
-            {myPlayerIndex === 0 && (
-              <SketchButton onClick={handleRestartGame} disabled={players.length < 2} className="w-full">
-                {players.length < 2 ? 'Waiting for opponent...' : 'Start Game'}
-              </SketchButton>
-            )}
+            <SketchButton onClick={handleRestartGame} disabled={players.length < 2} className="w-full">
+              {players.length < 2 ? 'Waiting for opponent...' : 'Start Game'}
+            </SketchButton>
 
             <SketchButton onClick={handleLeaveRoom} className="w-full mt-2" style={{ background: '#fff0f0' }}>
               Leave Room

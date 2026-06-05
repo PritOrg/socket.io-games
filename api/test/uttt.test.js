@@ -295,4 +295,41 @@ describe('Ultimate Tic-Tac-Toe (UTTT) Game Logic', function () {
       });
     });
   });
+
+  describe('Restart Game', () => {
+    let roomId;
+
+    beforeEach((done) => {
+      player1.emit('uttt_createRoom', 'Alice');
+      player1.once('uttt_roomInfo', (room) => {
+        roomId = room.id;
+        player2.emit('uttt_joinRoom', { roomId, playerName: 'Bob' });
+        player1.once('uttt_gameStarted', () => done());
+      });
+    });
+
+    it('should emit uttt_gameRestarted on restart', (done) => {
+      player1.emit('uttt_makeMove', { roomId, gridIndex: 4, squareIndex: 4 });
+
+      player1.once('uttt_gameState', () => {
+        player1.emit('uttt_restartGame', roomId);
+        player1.once('uttt_gameRestarted', () => {
+          done();
+        });
+      });
+    });
+
+    it('should reset board state on restart', (done) => {
+      player1.emit('uttt_makeMove', { roomId, gridIndex: 4, squareIndex: 4 });
+
+      player1.once('uttt_gameState', () => {
+        player1.emit('uttt_restartGame', roomId);
+        player1.once('uttt_roomInfo', (room) => {
+          expect(room.gameState).to.equal('playing');
+          expect(room.board[4][4]).to.equal(null);
+          done();
+        });
+      });
+    });
+  });
 });

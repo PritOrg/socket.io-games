@@ -20,6 +20,9 @@ class DabManager extends BaseManager {
       const sanitized = this.sanitizeRoomId(roomId);
       if (sanitized) this.sendRoomInfo(sanitized);
     });
+    socket.on('server_shutdown', () => {
+      this.clearAllTimersForRoom(socket.id);
+    });
     socket.on('disconnect', () => this.handleDisconnect(socket));
   }
 
@@ -67,6 +70,8 @@ class DabManager extends BaseManager {
       currentTurn: 0,
       rows,
       cols,
+      maxPlayers,
+      settings: {},
       horizontalLines: Array(rows + 1)
         .fill(null)
         .map(() => Array(cols).fill(null)),
@@ -81,9 +86,6 @@ class DabManager extends BaseManager {
       lastMovePlayerIndex: null,
       lastClaimedBox: null,
       redoRequest: null,
-      redoRequestTimer: null,
-
-      maxPlayers,
       startedWithPlayers: maxPlayers,
     };
 
@@ -134,6 +136,24 @@ class DabManager extends BaseManager {
     if (playerIndex === -1) return;
 
     if (room.gameState === 'playing') {
+      // B3: Timer cleanup on player leave/disconnect
+      // Clear redo timer if the leaving player was involved in the redo request
+      if (room.redoRequest) {
+        const isRequester = room.redoRequest.requesterId === socket.id;
+        const isTarget = room.redoRequest.targetId === socket.id;
+        if (isRequester || isTarget) {
+          this.clearTimer(`redo_${sanitizedRoomId}`);
+          room.redoRequest = null;
+        }
+      }
+
+      // B5: Clear lastMove if relevant player disconnects
+      if (room.lastMovePlayerIndex !== null && playerIndex === room.lastMovePlayerIndex) {
+        room.lastMove = null;
+        room.lastMovePlayerIndex = null;
+        room.lastClaimedBox = null;
+      }
+
       room.players[playerIndex].connected = false;
 
       const activeCount = room.players.filter((p) => p.connected).length;
@@ -185,9 +205,9 @@ class DabManager extends BaseManager {
     room.scores = Array(room.maxPlayers).fill(0);
     room.lastMove = null;
     room.lastMovePlayerIndex = null;
+    room.lastClaimedBox = null;
     room.redoRequest = null;
-    room.redoRequestTimer = null;
-    room.gameState = 'waiting';
+    room.startedWithPlayers = room.maxPlayers;
 
     this.io.to(room.id).emit(`${this.gamePrefix}_gameRestarted`);
     this.sendRoomInfo(room.id);
@@ -232,10 +252,7 @@ class DabManager extends BaseManager {
     const nextPlayerIndex = this.getNextTurn(room);
 
     // Clear any existing redo request timer
-    if (room.redoRequestTimer) {
-      clearTimeout(room.redoRequestTimer);
-      room.redoRequestTimer = null;
-    }
+    this.clearTimer(`redo_${roomIdSanitized}`);
 
     room.redoRequest = {
       requesterId: socket.id,
@@ -246,8 +263,18 @@ class DabManager extends BaseManager {
       claimedBox: room.lastClaimedBox || null,
     };
 
+    // Set redo request timer - auto-expire after 15 seconds
+    const timer = setTimeout(() => {
+      room.redoRequest = null;
+      this.io.to(roomIdSanitized).emit(`${this.gamePrefix}_redoCancelled`);
+      this.sendRoomInfo(roomIdSanitized);
+    }, 15000);
+
+    this.timers.set(`redo_${roomIdSanitized}`, timer);
+
     this.io.to(room.id).emit(`${this.gamePrefix}_redoRequested`, {
       requesterId: socket.id,
+      requesterName: room.players[playerIndex].name,
     });
   }
 
@@ -267,18 +294,22 @@ class DabManager extends BaseManager {
 
     const requester = room.players[room.redoRequest.requesterIndex];
     if (!requester || !requester.connected) {
+      this.clearTimer(`redo_${roomIdSanitized}`);
       room.redoRequest = null;
       this.io.to(room.id).emit(`${this.gamePrefix}_redoResponse`, {
         accepted: false,
         reason: 'Requester disconnected.',
       });
+      this.sendRoomInfo(room.id);
       return;
     }
 
     if (accept) {
       if (!room.redoRequest.lastMove) {
+        this.clearTimer(`redo_${roomIdSanitized}`);
         room.redoRequest = null;
         this.io.to(room.id).emit(`${this.gamePrefix}_redoResponse`, { accepted: false });
+        this.sendRoomInfo(room.id);
         return;
       }
 
@@ -316,6 +347,7 @@ class DabManager extends BaseManager {
       });
     }
 
+    this.clearTimer(`redo_${roomIdSanitized}`);
     room.redoRequest = null;
     this.sendRoomInfo(room.id);
   }
@@ -345,7 +377,9 @@ class DabManager extends BaseManager {
       const activeCount = room.players.filter((p) => p.connected).length;
       if (activeCount >= 2) {
         room.gameState = 'playing';
+        // Note: forfeit_${roomId} timer is never registered in this manager; clearTimer is a no-op pending forfeit feature
         this.clearTimer(`forfeit_${sanitizedRoomId}`);
+        this.io.to(room.id).emit(`${this.gamePrefix}_playerReconnected`, { playerId: socket.id });
         this.io.to(room.id).emit(`${this.gamePrefix}_alert`, {
           icon: 'success',
           title: 'Player Reconnected',
@@ -387,10 +421,9 @@ class DabManager extends BaseManager {
     room.lastMove = { lineType, r, c };
     room.lastMovePlayerIndex = playerIndex;
 
-    // Clear any pending redo request when a new move is made
     if (room.redoRequest) {
+      this.clearTimer(`redo_${roomIdSanitized}`);
       room.redoRequest = null;
-      room.redoRequestTimer = null;
     }
 
     const claimedBoxes = this.checkBoxes(room, r, c, lineType, playerIndex);
@@ -513,6 +546,24 @@ class DabManager extends BaseManager {
       const playerIndex = room.players.findIndex((p) => p.id === socket.id);
       if (playerIndex === -1) continue;
 
+      // B3: Timer cleanup on player leave/disconnect
+      // Clear redo timer if the disconnecting player was involved in the redo request
+      if (room.redoRequest) {
+        const isRequester = room.redoRequest.requesterId === socket.id;
+        const isTarget = room.redoRequest.targetId === socket.id;
+        if (isRequester || isTarget) {
+          this.clearTimer(`redo_${roomId}`);
+          room.redoRequest = null;
+        }
+      }
+
+      // B5: Clear lastMove if relevant player disconnects
+      if (room.lastMovePlayerIndex !== null && playerIndex === room.lastMovePlayerIndex) {
+        room.lastMove = null;
+        room.lastMovePlayerIndex = null;
+        room.lastClaimedBox = null;
+      }
+
       room.players[playerIndex].connected = false;
 
       if (room.gameState === 'playing') {
@@ -540,9 +591,13 @@ class DabManager extends BaseManager {
   sendRoomInfo(roomId) {
     const room = this.rooms.get(roomId);
     if (!room) return;
-
-    const { ...sanitized } = room;
-    this.io.to(roomId).emit(`${this.gamePrefix}_roomInfo`, sanitized);
+    const cleanRoom = {
+      ...room,
+      turnTimer: undefined,
+      forfeitTimer: undefined,
+      emptyTimer: undefined,
+    };
+    this.io.to(roomId).emit(`${this.gamePrefix}_roomInfo`, cleanRoom);
   }
 }
 

@@ -179,9 +179,9 @@ describe('Bingo Game Logic', function () {
             const allNumbers = Array.from({ length: 25 }, (_, i) => i + 1);
 
             let timeout = setTimeout(() => done(new Error('timeout')), 5000);
-            player1.once('bingo_playerWon', (winnerId) => {
+            player1.once('bingo_playerWon', ({ winner }) => {
               clearTimeout(timeout);
-              expect(winnerId).to.be.oneOf([player1.id, player2.id]);
+              expect(winner).to.be.oneOf([player1.id, player2.id]);
               done();
             });
 
@@ -208,7 +208,6 @@ describe('Bingo Game Logic', function () {
                 player2.once('bingo_nextTurn', markAllNumbers);
               }
             };
-
             markAllNumbers();
           });
         });

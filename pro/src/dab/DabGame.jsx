@@ -41,7 +41,7 @@ const addWobble = (x1, y1, x2, y2, seed = 0) => {
 };
 
 const DabGame = () => {
-  const { socket, playerName, roomId, setRoomId, clearRoomId, profile, setProfile } = useGameContext();
+  const { socket, playerName, roomId, setRoomId, clearRoomId, setGamePrefix, profile, setProfile } = useGameContext();
   const navigate = useNavigate();
 
   const [players, setPlayers] = useState([]);
@@ -100,13 +100,21 @@ const DabGame = () => {
   useEffect(() => {
     if (!socket) return;
 
+    setGamePrefix('dab');
+
     const saved = sessionStorage.getItem('dab_reconnect');
-    if (saved && !reconnectAttempted.current) {
+    const hasSavedReconnect = saved && !reconnectAttempted.current;
+    if (hasSavedReconnect) {
       reconnectAttempted.current = true;
       const { roomId: savedRoomId, playerId } = JSON.parse(saved);
       socket.emit('dab_reconnect', { roomId: savedRoomId, playerId });
       setRoomId(savedRoomId);
       return;
+    }
+
+    // recovery: emit requestRoomInfo if roomId exists but we haven't received roomInfo yet
+    if (roomId) {
+      socket.emit('dab_requestRoomInfo', roomId);
     }
 
     socket.on('dab_roomInfo', (room) => {
@@ -251,6 +259,28 @@ const DabGame = () => {
       setRedoRequest(null);
     });
 
+    socket.on('dab_redoResponse', ({ accepted, reason, requesterId, requesterName }) => {
+      if (!accepted) {
+        setRedoRequest(null);
+        if (reason === 'Requester disconnected.') {
+          Swal.fire({
+            title: 'Redo Failed',
+            text: 'The player who requested undo disconnected.',
+            icon: 'info',
+            customClass: { popup: sketchPopupClass },
+          });
+        } else {
+          const name = requesterName || players.find((p) => p.id === requesterId)?.name || 'Someone';
+          Swal.fire({
+            title: 'Undo Denied',
+            text: `${name}'s undo request was denied.`,
+            icon: 'warning',
+            customClass: { popup: sketchPopupClass },
+          });
+        }
+      }
+    });
+
     socket.on('dab_moveUndone', ({ horizontalLines: h, verticalLines: v, boxes: b, scores: s, currentTurn: t }) => {
       setHorizontalLines(h);
       setVerticalLines(v);
@@ -272,9 +302,10 @@ const DabGame = () => {
       socket.off('dab_gamePaused');
       socket.off('dab_redoRequested');
       socket.off('dab_redoCancelled');
+      socket.off('dab_redoResponse');
       socket.off('dab_moveUndone');
     };
-  }, [socket, rows, cols, players]);
+  }, [socket, rows, cols, players, playBox, playLine, setGamePrefix, setRoomId]);
 
   const handleLineClick = (lineType, r, c) => {
     if (gameState !== 'playing') return;
@@ -412,7 +443,7 @@ const DabGame = () => {
   }
 
   return (
-    <GameLayout socket={socket} roomId={roomId} gamePrefix="dab" players={players}>
+    <GameLayout players={players}>
       <div className="w-full p-4">
         {gameState === 'waiting' && (
           <div className="max-w-4xl mx-auto relative z-10">

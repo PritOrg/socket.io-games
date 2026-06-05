@@ -20,6 +20,9 @@ class BingoManager extends BaseManager {
       const sanitized = this.sanitizeRoomId(roomId);
       if (sanitized) this.sendRoomInfo(sanitized);
     });
+    socket.on('server_shutdown', () => {
+      this.clearAllTimersForRoom(socket.id);
+    });
     socket.on('disconnect', () => this.handleDisconnect(socket));
   }
 
@@ -43,6 +46,7 @@ class BingoManager extends BaseManager {
           connected: true,
         },
       ],
+      settings: {},
       currentTurn: null,
       turnOrder: [socket.id],
       gameState: 'waiting',
@@ -234,7 +238,7 @@ class BingoManager extends BaseManager {
     // Check bingo progress for current player
     if (this.checkAndBroadcastBingo(room, socket.id)) {
       room.gameState = 'ended';
-      this.io.to(roomIdSanitized).emit(`${this.gamePrefix}_playerWon`, socket.id);
+      this.io.to(roomIdSanitized).emit(`${this.gamePrefix}_playerWon`, { winner: socket.id });
       this.sendRoomInfo(roomIdSanitized);
       return;
     }
@@ -308,7 +312,8 @@ class BingoManager extends BaseManager {
     }
 
     room.gameState = 'ended';
-    this.io.to(sanitizedRoomId).emit(`${this.gamePrefix}_playerWon`, socket.id);
+    this.io.to(sanitizedRoomId).emit(`${this.gamePrefix}_playerWon`, { winner: socket.id });
+    this.sendRoomInfo(sanitizedRoomId);
   }
 
   leaveRoom(socket, roomId) {
@@ -382,6 +387,7 @@ class BingoManager extends BaseManager {
       const activeCount = room.players.filter((p) => p.connected).length;
       if (activeCount >= 2) {
         room.gameState = 'playing';
+        // Note: forfeit_${roomId} timer is never registered in this manager; clearTimer is a no-op pending forfeit feature
         this.clearTimer(`forfeit_${roomIdSanitized}`);
         this.io.to(room.id).emit(`${this.gamePrefix}_alert`, {
           icon: 'success',

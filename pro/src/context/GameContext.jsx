@@ -25,6 +25,7 @@ export const GameProvider = ({ children }) => {
         };
   });
   const [roomId, setRoomId] = useState(null);
+  const [gamePrefix, setGamePrefix] = useState(null);
   const [socket, setSocket] = useState(null);
   const socketRef = useRef(null);
 
@@ -96,6 +97,8 @@ export const GameProvider = ({ children }) => {
     setRoomId,
     clearRoomId,
     socket,
+    gamePrefix,
+    setGamePrefix,
   };
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;

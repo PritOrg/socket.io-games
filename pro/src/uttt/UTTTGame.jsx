@@ -20,7 +20,7 @@ import logger from '../utils/logger';
 const PLAYER_COLORS = ['#1a1a2e', '#c73e1d'];
 
 const UTTTGame = () => {
-  const { socket, playerName, roomId, setRoomId, clearRoomId, profile, setProfile } = useGameContext();
+  const { socket, playerName, roomId, setRoomId, clearRoomId, profile, setProfile, setGamePrefix } = useGameContext();
   const [players, setPlayers] = useState([]);
   const [currentTurn, setCurrentTurn] = useState(null);
   const [gameState, setGameState] = useState('waiting');
@@ -43,6 +43,8 @@ const UTTTGame = () => {
 
   useEffect(() => {
     if (!socket) return;
+
+    setGamePrefix('uttt');
 
     logger.info('UTTT', `Socket connected: ${socket.id}`);
 
@@ -306,7 +308,7 @@ const UTTTGame = () => {
   };
 
   return (
-    <GameLayout socket={socket} roomId={roomId} gamePrefix="uttt" players={players}>
+    <GameLayout players={players}>
       <div className="flex flex-col items-center justify-center p-2 sm:p-4 w-full">
         {/* Title with sketch effect */}
         <div className="text-center mb-3 sm:mb-6">

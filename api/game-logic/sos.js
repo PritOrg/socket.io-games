@@ -18,6 +18,9 @@ class SOSManager extends BaseManager {
       const sanitized = this.sanitizeRoomId(roomId);
       if (sanitized) this.sendRoomInfo(sanitized);
     });
+    socket.on('server_shutdown', () => {
+      this.clearAllTimersForRoom(socket.id);
+    });
     socket.on('disconnect', () => this.handleDisconnect(socket));
   }
 
@@ -40,6 +43,9 @@ class SOSManager extends BaseManager {
       ],
       spectators: [],
       gameState: 'waiting',
+      settings: {
+        size: boardSize,
+      },
       size: boardSize,
       board: Array(boardSize)
         .fill(null)
@@ -165,6 +171,7 @@ class SOSManager extends BaseManager {
         const activeCount = room.players.filter((p) => p.connected).length;
         if (activeCount >= 2) {
           room.gameState = 'playing';
+          // Note: forfeit_${roomId} timer is never registered in this manager; clearTimer is a no-op pending forfeit feature
           this.io.to(room.id).emit(`${this.gamePrefix}_alert`, {
             icon: 'success',
             title: 'Player Reconnected',
@@ -397,7 +404,13 @@ class SOSManager extends BaseManager {
   sendRoomInfo(roomId) {
     const room = this.rooms.get(roomId);
     if (!room) return;
-    this.io.to(roomId).emit(`${this.gamePrefix}_roomInfo`, room);
+    const cleanRoom = {
+      ...room,
+      turnTimer: undefined,
+      forfeitTimer: undefined,
+      emptyTimer: undefined,
+    };
+    this.io.to(roomId).emit(`${this.gamePrefix}_roomInfo`, cleanRoom);
   }
 }
 

@@ -18,6 +18,9 @@ class Connect4Manager extends BaseManager {
       const sanitized = this.sanitizeRoomId(roomId);
       if (sanitized) this.sendRoomInfo(sanitized);
     });
+    socket.on('server_shutdown', () => {
+      this.clearAllTimersForRoom(socket.id);
+    });
     socket.on('disconnect', () => this.handleDisconnect(socket));
   }
 
@@ -40,6 +43,7 @@ class Connect4Manager extends BaseManager {
       ],
       spectators: [],
       gameState: 'waiting',
+      settings: {},
       board: this.createEmptyBoard(),
       currentTurn: null,
       winner: null,
@@ -368,7 +372,13 @@ class Connect4Manager extends BaseManager {
   sendRoomInfo(roomId) {
     const room = this.rooms.get(roomId);
     if (!room) return;
-    this.io.to(roomId).emit(`${this.gamePrefix}_roomInfo`, room);
+    const cleanRoom = {
+      ...room,
+      turnTimer: undefined,
+      forfeitTimer: undefined,
+      emptyTimer: undefined,
+    };
+    this.io.to(roomId).emit(`${this.gamePrefix}_roomInfo`, cleanRoom);
   }
 }
 

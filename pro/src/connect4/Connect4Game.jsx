@@ -9,16 +9,16 @@ import TurnIndicator from '../components/ui/TurnIndicator';
 import { AvatarSelector, AvatarReactionBar } from '../components/ui';
 import Swal from 'sweetalert2';
 import useSound from 'use-sound';
-import confetti from 'canvas-confetti';
 
 const Connect4Game = () => {
-  const { socket, clearRoomId, profile, setProfile } = useGameContext();
+  const { socket, clearRoomId, setGamePrefix, profile, setProfile } = useGameContext();
   const navigate = useNavigate();
   const [gameState, setGameState] = useState('lobby');
   const [room, setRoom] = useState(null);
   const [hoverCol, setHoverCol] = useState(null);
   const [winLine, setWinLine] = useState(null);
   const reconnectAttempted = useRef(false);
+  const joinRoomIdRef = useRef(null);
   const [lastMove, setLastMove] = useState(null);
 
   const [playMove] = useSound('/sounds/move.mp3', { volume: 0.5 });
@@ -26,6 +26,8 @@ const Connect4Game = () => {
 
   useEffect(() => {
     if (!socket) return;
+
+    setGamePrefix('c4');
 
     const saved = sessionStorage.getItem('c4_reconnect');
     if (saved && !reconnectAttempted.current) {
@@ -69,12 +71,6 @@ const Connect4Game = () => {
       if (data.winLine) {
         setWinLine(data.winLine.map((c) => `${c.row}-${c.col}`));
         playWin();
-        // Subtle confetti for Connect4 win
-        confetti({
-          particleCount: 25,
-          spread: 30,
-          origin: { y: 0.7 },
-        });
       }
     });
 
@@ -180,7 +176,7 @@ const Connect4Game = () => {
     const canPlay = room.currentTurn === socket?.id && !isSpectator;
 
     return (
-      <GameLayout socket={socket} roomId={room.id} gamePrefix="c4" players={room.players}>
+      <GameLayout players={room.players}>
         <div className="flex flex-col items-center gap-4 p-4">
           {isSpectator && (
             <div className="sketch-card px-4 py-2 bg-blue-100">
@@ -283,6 +279,7 @@ const Connect4Game = () => {
             placeholder="Room Code"
             className="sketch-input w-full mt-1 mb-2"
             maxLength={6}
+            ref={joinRoomIdRef}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 const roomId = e.target.value.trim();
@@ -291,18 +288,18 @@ const Connect4Game = () => {
             }}
           />
           <SketchButton
-            onClick={(e) => {
-              const roomIdInput = e.target.previousElementSibling;
-              if (roomIdInput?.value) handleJoinRoom(roomIdInput.value.trim());
+            onClick={() => {
+              const roomIdInput = joinRoomIdRef.current?.value || '';
+              if (roomIdInput) handleJoinRoom(roomIdInput.trim());
             }}
             className="w-full"
           >
             Join as Player
           </SketchButton>
           <SketchButton
-            onClick={(e) => {
-              const roomIdInput = e.target.previousElementSibling.previousElementSibling;
-              if (roomIdInput?.value) handleJoinRoom(roomIdInput.value.trim(), true);
+            onClick={() => {
+              const roomIdInput = joinRoomIdRef.current?.value || '';
+              if (roomIdInput) handleJoinRoom(roomIdInput.trim(), true);
             }}
             className="w-full mt-2"
             style={{ background: '#f0f8ff' }}

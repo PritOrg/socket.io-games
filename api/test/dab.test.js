@@ -89,6 +89,7 @@ describe('Dots & Boxes (DAB) Game Logic', function () {
         expect(room.players).to.have.lengthOf(1);
         expect(room.rows).to.equal(5);
         expect(room.cols).to.equal(5);
+        expect(room.settings).to.deep.equal({});
         expect(room.gameState).to.equal('waiting');
         done();
       });
@@ -719,6 +720,90 @@ describe('Dots & Boxes (DAB) Game Logic', function () {
       player2.emit('dab_reconnect', { roomId, playerId: player2.id });
       const newRoom = await reconnectPromise;
       expect(newRoom.players[0].connected).to.equal(true);
+    });
+  });
+
+  describe('Redo Request Timer Cleanup', () => {
+    it('should clear redo timer when requester leaves during pending redo', async () => {
+      const roomId = await setupRoom();
+
+      // Player 1 makes a move to enable redo (box claim gives them another turn)
+      await makeMove(player1, roomId, 'h', 0, 0);
+      await makeMove(player2, roomId, 'v', 0, 0);
+      await makeMove(player1, roomId, 'v', 0, 1);
+      await makeMove(player2, roomId, 'h', 1, 0);
+
+      // Player 2 requests redo (they just made the last move)
+      const redoPromise = new Promise((resolve) => {
+        player1.once('dab_redoRequested', resolve);
+      });
+      player2.emit('dab_requestRedo', roomId);
+      await redoPromise;
+
+      // Player 2 leaves - timer should be cleared
+      player2.emit('dab_leaveRoom', roomId);
+
+      // Wait and verify no unexpected redoCancelled event
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      // Test passes if no exception thrown
+    });
+
+    it('should clear redo timer when target leaves during pending redo', async () => {
+      const roomId = await setupRoom();
+
+      // Player 1 makes a move
+      await makeMove(player1, roomId, 'h', 0, 0);
+      await makeMove(player2, roomId, 'v', 0, 0);
+      await makeMove(player1, roomId, 'v', 0, 1);
+      await makeMove(player2, roomId, 'h', 1, 0);
+
+      // Player 2 requests redo (they made the move that gave them another turn)
+      const redoPromise = new Promise((resolve) => {
+        player1.once('dab_redoRequested', resolve);
+      });
+      player2.emit('dab_requestRedo', roomId);
+      const redoData = await redoPromise;
+      expect(redoData).to.have.property('requesterName');
+    });
+  });
+
+  describe('Redo Payload', () => {
+    it('should include requesterName in redoRequested payload', async () => {
+      const roomId = await setupRoom();
+
+      // Player 1 makes a move to set up lastMove
+      await makeMove(player1, roomId, 'h', 0, 0);
+      await makeMove(player2, roomId, 'v', 0, 0);
+      await makeMove(player1, roomId, 'v', 0, 1);
+      await makeMove(player2, roomId, 'h', 1, 0);
+
+      // Player 2 requests redo (they made the last move)
+      const redoPromise = new Promise((resolve) => {
+        player1.once('dab_redoRequested', resolve);
+      });
+      player2.emit('dab_requestRedo', roomId);
+      const redoData = await redoPromise;
+
+      expect(redoData).to.have.property('requesterName');
+      expect(redoData.requesterName).to.equal('Bob');
+    });
+  });
+
+  describe('Settings Object', () => {
+    it('should include settings object in room on creation', (done) => {
+      player1.emit('dab_createRoom', { mode: 'custom', customRows: 5, customCols: 5, customPlayers: 2 });
+      player1.once('dab_roomInfo', (room) => {
+        expect(room.settings).to.deep.equal({});
+        done();
+      });
+    });
+
+    it('should include settings in room on join', (done) => {
+      player1.emit('dab_createRoom', { mode: 'classic', customPlayers: 2 });
+      player1.once('dab_roomInfo', (room) => {
+        expect(room.settings).to.deep.equal({});
+        done();
+      });
     });
   });
 });

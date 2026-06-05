@@ -47,6 +47,10 @@ class UTTTManager extends BaseManager {
       logger.warn('UTTT', `Socket disconnected: ${socket.id}`);
       this.handleDisconnect(socket);
     });
+
+    socket.on('server_shutdown', () => {
+      this.clearAllTimersForRoom(socket.id);
+    });
   }
 
   checkInnerWin(board) {
@@ -98,6 +102,7 @@ class UTTTManager extends BaseManager {
     socket.join(roomId);
     const room = {
       id: roomId,
+      creator: socket.id,
       players: [
         {
           id: socket.id,
@@ -107,6 +112,7 @@ class UTTTManager extends BaseManager {
           connected: true,
         },
       ],
+      settings: {},
       symbols: { [socket.id]: 'X' },
       currentTurn: null,
       gameState: 'waiting',
@@ -116,7 +122,7 @@ class UTTTManager extends BaseManager {
       macroBoard: Array(9).fill(null),
       activeGrid: null,
       scores: { X: 0, O: 0 },
-      wonGrids: new Set(),
+      wonGrids: [],
       lastMove: null,
     };
     this.rooms.set(roomId, room);
@@ -180,13 +186,14 @@ class UTTTManager extends BaseManager {
     room.macroBoard = Array(9).fill(null);
     room.activeGrid = null;
     room.scores = { X: 0, O: 0 };
-    room.wonGrids = new Set();
+    room.wonGrids = [];
     room.lastMove = null;
     room.gameState = 'playing';
     room.currentTurn = room.players[0].id;
 
     logger.info('UTTT', `Game restarted in room ${roomId}`);
     this.io.to(roomId).emit(`${this.gamePrefix}_gameStarted`);
+    this.io.to(roomId).emit(`${this.gamePrefix}_gameRestarted`);
     this.sendRoomInfo(roomId);
   }
 
@@ -261,9 +268,14 @@ class UTTTManager extends BaseManager {
 
     const innerResult = this.checkInnerWin(room.board[gridIndex]);
     if (innerResult.winner && !['X', 'O', 'DEAD'].includes(room.macroBoard[gridIndex])) {
+      const prevWon = room.wonGrids.includes(gridIndex);
       room.macroBoard[gridIndex] = innerResult.winner;
+      room.wonGrids = room.wonGrids.filter((g) => g !== gridIndex);
+      room.wonGrids.push(gridIndex);
       room.scores[innerResult.winner]++;
-      room.wonGrids.add(gridIndex);
+      if (!prevWon) {
+        this.io.to(room.id).emit(`${this.gamePrefix}_miniWin`, { gridIndex, winner: innerResult.winner });
+      }
       logger.info(
         'UTTT',
         `Inner win: Grid ${gridIndex} won by ${innerResult.winner}! Score: X=${room.scores.X}, O=${room.scores.O}`,
@@ -442,6 +454,7 @@ class UTTTManager extends BaseManager {
       const activeCount = room.players.filter((p) => p.connected).length;
       if (activeCount >= 2) {
         room.gameState = 'playing';
+        // Note: forfeit_${roomId} timer is never registered in this manager; clearTimer is a no-op pending forfeit feature
         this.clearTimer(`forfeit_${roomId}`);
         this.io.to(room.id).emit(`${this.gamePrefix}_alert`, {
           icon: 'success',
@@ -458,16 +471,10 @@ class UTTTManager extends BaseManager {
     const room = this.rooms.get(roomId);
     if (!room) return;
     const cleanRoom = {
-      id: room.id,
-      players: room.players,
-      symbols: room.symbols,
-      currentTurn: room.currentTurn,
-      gameState: room.gameState,
-      board: room.board,
-      macroBoard: room.macroBoard,
-      activeGrid: room.activeGrid,
-      scores: room.scores,
-      lastMove: room.lastMove,
+      ...room,
+      turnTimer: undefined,
+      forfeitTimer: undefined,
+      emptyTimer: undefined,
     };
     this.io.to(roomId).emit(`${this.gamePrefix}_roomInfo`, cleanRoom);
   }

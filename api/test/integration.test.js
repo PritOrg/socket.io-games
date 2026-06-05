@@ -373,4 +373,56 @@ describe('Cross-Game Integration Tests', function () {
       expect(bingoState2.gameState).to.equal('playing');
     });
   });
+
+  describe('Settings Object Normalization', () => {
+    it('all games should include settings object in room', async () => {
+      const bingoRoom = new Promise((resolve) => {
+        player1.emit('bingo_createRoom', 'Alice');
+        player1.once('bingo_roomInfo', (room) => resolve(room));
+      });
+
+      const tttRoom = new Promise((resolve) => {
+        player2.emit('ttt_createRoom', 'Bob');
+        player2.once('ttt_roomInfo', (room) => resolve(room));
+      });
+
+      const c4Room = new Promise((resolve) => {
+        player3.emit('c4_createRoom', 'Charlie');
+        player3.once('c4_roomInfo', (room) => resolve(room));
+      });
+
+      const utttRoom = new Promise((resolve) => {
+        player4.emit('uttt_createRoom', 'Diana');
+        player4.once('uttt_roomInfo', (room) => resolve(room));
+      });
+
+      const [bRoom, tRoom, cRoom, uRoom] = await Promise.all([bingoRoom, tttRoom, c4Room, utttRoom]);
+
+      expect(bRoom).to.have.property('settings');
+      expect(tRoom).to.have.property('settings');
+      expect(cRoom).to.have.property('settings');
+      expect(uRoom).to.have.property('settings');
+
+      expect(bRoom.settings).to.deep.equal({});
+      expect(tRoom.settings).to.deep.equal({});
+      expect(cRoom.settings).to.deep.equal({});
+      expect(uRoom.settings).to.deep.equal({});
+    });
+
+    it('DAB should include settings object (backward compat)', (done) => {
+      player1.emit('dab_createRoom', { mode: 'custom', customRows: 5, customCols: 4, customPlayers: 3 });
+      player1.once('dab_roomInfo', (room) => {
+        expect(room.settings).to.deep.equal({});
+        done();
+      });
+    });
+
+    it('SOS should include settings with size', (done) => {
+      player1.emit('sos_createRoom', { playerName: 'Alice', size: 7 });
+      player1.once('sos_roomInfo', (room) => {
+        expect(room.settings).to.deep.equal({ size: 7 });
+        done();
+      });
+    });
+  });
 });
