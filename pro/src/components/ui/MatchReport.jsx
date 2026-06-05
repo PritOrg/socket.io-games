@@ -1,51 +1,109 @@
 import React from 'react';
-import { Trophy, Frown, Award } from 'lucide-react';
+import { Trophy, Frown, Award, Users } from 'lucide-react';
 import SketchButton from './SketchButton';
 import SketchCard from './SketchCard';
 
-const MatchReport = ({ winner, isWinner, stats = {}, scores, onRematch, onNewRoom, players = [] }) => {
-  const getScoreDisplay = () => {
-    if (!scores) return null;
+const normalizeScores = (scores, players = []) => {
+  if (!scores) return [];
+  if (Array.isArray(scores)) {
+    return scores.map((score, idx) => {
+      const raw = score;
+      let value = typeof raw === 'number' ? raw : (raw?.value ?? raw?.score ?? 0);
+      const name = (typeof raw === 'object' && raw?.name) || players[idx]?.name || `Player ${idx + 1}`;
+      return { name, score: value };
+    });
+  }
+  return Object.entries(scores).map(([name, value], idx) => ({
+    name,
+    score: typeof value === 'number' ? value : (value?.value ?? 0),
+    ...(players[idx] ? { profileName: players[idx].name } : {}),
+  }));
+};
 
-    const p1Score = scores[0] || 0;
-    const p2Score = scores[1] || 0;
-    const p1Name = players[0]?.name || 'Player 1';
-    const p2Name = players[1]?.name || 'Player 2';
+const MatchReport = ({ winner, isWinner, stats = {}, scores, onRematch, onNewRoom, players = [] }) => {
+  const scoreList = normalizeScores(scores, players);
+
+  const getScoreDisplay = () => {
+    if (!scoreList.length) return null;
+
+    if (scoreList.length === 2) {
+      const [p1, p2] = scoreList;
+      return (
+        <div className="flex justify-center items-center gap-6 mb-4">
+          <div className="flex flex-col items-center">
+            <span className="paper-font text-sm text-ink/70">{p1.name}</span>
+            <span className={`font-sketch text-3xl ${p1.score > p2.score ? 'text-yellow-600' : ''}`}>{p1.score}</span>
+          </div>
+          <Award size={24} className="text-ink/50" />
+          <div className="flex flex-col items-center">
+            <span className="paper-font text-sm text-ink/70">{p2.name}</span>
+            <span className={`font-sketch text-3xl ${p2.score > p1.score ? 'text-yellow-600' : ''}`}>{p2.score}</span>
+          </div>
+        </div>
+      );
+    }
 
     return (
-      <div className="flex justify-center items-center gap-6 mb-4">
-        <div className="flex flex-col items-center">
-          <span className="paper-font text-sm text-ink/70">{p1Name}</span>
-          <span className={`font-sketch text-3xl ${p1Score > p2Score ? 'text-yellow-600' : ''}`}>{p1Score}</span>
+      <div className="space-y-3 mb-4">
+        <div className="flex items-center justify-center gap-2 text-ink/70 mb-1">
+          <Users size={18} />
+          <span className="paper-font text-sm">Standings</span>
         </div>
-        <Award size={24} className="text-ink/50" />
-        <div className="flex flex-col items-center">
-          <span className="paper-font text-sm text-ink/70">{p2Name}</span>
-          <span className={`font-sketch text-3xl ${p2Score > p1Score ? 'text-yellow-600' : ''}`}>{p2Score}</span>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 justify-items-center">
+          {scoreList.map((entry, idx) => {
+            const maxScore = Math.max(...scoreList.map((item) => item.score));
+            const isTop = scoreList.length > 1 && entry.score === maxScore;
+            return (
+              <div
+                key={`${entry.name}-${idx}`}
+                className={`flex flex-col items-center p-2 rounded-lg border-2 ${
+                  isTop ? 'border-yellow-400/70 bg-yellow-50/60' : 'border-gray-200/70 bg-white/60'
+                }`}
+              >
+                <span className="paper-font text-xs text-ink/70 truncate max-w-[7rem]">{entry.name}</span>
+                <span className={`font-sketch text-3xl ${isTop ? 'text-yellow-700' : ''}`}>{entry.score}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
   };
 
   const getWinnerDisplay = () => {
-    if (scores) {
-      const p1Score = scores[0] || 0;
-      const p2Score = scores[1] || 0;
-      if (p1Score === p2Score) {
-        return <h2 className="text-2xl font-sketch mb-1 text-ink">It&apos;s a Tie!</h2>;
+    if (!winner && !isWinner && scoreList.length > 1) {
+      const topScore = Math.max(...scoreList.map((item) => item.score));
+      const winners = scoreList.filter((item) => item.score === topScore);
+      if (winners.length > 1) {
+        return (
+          <>
+            <div className="flex justify-center mb-2">
+              <Frown size={40} className="text-gray-400" />
+            </div>
+            <h2 className="text-2xl font-sketch mb-1 text-ink">It&apos;s a Tie!</h2>
+            <p className="paper-font text-sm text-ink/70">{winners.map((w) => w.name).join(' & ')}</p>
+          </>
+        );
       }
-      const winnerName = p1Score > p2Score ? players[0]?.name || 'Player 1' : players[1]?.name || 'Player 2';
-      return (
-        <>
-          <div className="flex justify-center mb-2">
-            <Trophy size={40} className="text-yellow-500" />
-          </div>
-          <h2 className="text-2xl font-sketch mb-1 text-ink">{winnerName} Wins!</h2>
-        </>
-      );
     }
 
-    if (!winner) {
+    if (scores && scoreList.length > 1) {
+      const topScore = Math.max(...scoreList.map((item) => item.score));
+      const winnerEntry = scoreList.find((item) => item.score === topScore);
+      if (winnerEntry) {
+        const displayName = winnerEntry.profileName || winnerEntry.name;
+        return (
+          <>
+            <div className="flex justify-center mb-2">
+              <Trophy size={40} className="text-yellow-500" />
+            </div>
+            <h2 className="text-2xl font-sketch mb-1 text-ink">{displayName} Wins!</h2>
+          </>
+        );
+      }
+    }
+
+    if (!winner && !isWinner) {
       return (
         <>
           <div className="flex justify-center mb-2">

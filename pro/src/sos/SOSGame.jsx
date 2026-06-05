@@ -6,6 +6,7 @@ import RoomLobby from '../components/ui/RoomLobby';
 import MatchReport from '../components/ui/MatchReport';
 import SketchButton from '../components/ui/SketchButton';
 import TurnIndicator from '../components/ui/TurnIndicator';
+import { sketchPopupClass } from '../components/ui';
 import Swal from 'sweetalert2';
 const SOSGame = () => {
   const { socket, playerName, clearRoomId, setGamePrefix, profile, setProfile } = useGameContext();
@@ -17,6 +18,7 @@ const SOSGame = () => {
   const [desiredSize, setDesiredSize] = useState(6);
   const joinRoomIdRef = useRef('');
   const reconnectAttempted = useRef(false);
+  const roomLoadedRef = useRef(false);
 
   useEffect(() => {
     if (!socket) return;
@@ -34,7 +36,13 @@ const SOSGame = () => {
   useEffect(() => {
     if (!socket) return;
 
+    // recovery: emit requestRoomInfo if roomId exists but we haven't received roomInfo yet
+    if (room?.id && !roomLoadedRef.current) {
+      socket.emit('sos_requestRoomInfo', room.id);
+    }
+
     socket.on('sos_roomInfo', (data) => {
+      roomLoadedRef.current = true;
       setRoom(data);
       if (data.gameState === 'playing') {
         setGameState('playing');
@@ -83,6 +91,25 @@ const SOSGame = () => {
       });
     });
 
+    socket.on('sos_scoreFlash', (_data) => {
+      // Score flash is already handled via sos_moveMade with patterns
+    });
+
+    socket.on('server_shutdown', ({ message }) => {
+      Swal.fire({
+        title: 'Server Shutting Down',
+        text: message || 'The server is going down for maintenance.',
+        icon: 'info',
+        customClass: { popup: sketchPopupClass },
+      }).then(() => {
+        sessionStorage.removeItem('sos_reconnect');
+        clearRoomId(room?.id);
+        setRoom(null);
+        setGameState('lobby');
+        navigate('/');
+      });
+    });
+
     return () => {
       socket.off('sos_roomInfo');
       socket.off('sos_gameStarted');
@@ -91,8 +118,10 @@ const SOSGame = () => {
       socket.off('sos_gamePaused');
       socket.off('sos_gameRestarted');
       socket.off('sos_alert');
+      socket.off('sos_scoreFlash');
+      socket.off('server_shutdown');
     };
-  }, [socket]);
+  }, [socket, room?.id, navigate]);
 
   const handleCreateRoom = (size) => {
     if (!socket) return;

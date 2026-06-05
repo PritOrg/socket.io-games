@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
@@ -9,6 +9,7 @@ import ThemeToggle from './ThemeToggle';
 const GameLayout = ({ players = [], children }) => {
   const navigate = useNavigate();
   const { socket, roomId, clearRoomId, gamePrefix } = useGameContext();
+  const [copiedLabel, setCopiedLabel] = useState('');
 
   const handleLeave = async () => {
     const result = await Swal.fire({
@@ -28,8 +29,15 @@ const GameLayout = ({ players = [], children }) => {
     navigate('/');
   };
 
-  const handleCopyRoomId = () => {
-    navigator.clipboard?.writeText(roomId);
+  const handleCopyRoomId = async () => {
+    try {
+      await navigator.clipboard.writeText(roomId);
+      setCopiedLabel('Copied!');
+      setTimeout(() => setCopiedLabel(''), 1500);
+    } catch {
+      setCopiedLabel('Copy failed');
+      setTimeout(() => setCopiedLabel(''), 1500);
+    }
   };
 
   return (
@@ -50,6 +58,7 @@ const GameLayout = ({ players = [], children }) => {
         >
           {roomId}
         </button>
+        {copiedLabel && <span className="text-xs text-ink/70 ml-1">{copiedLabel}</span>}
 
         <div className="flex gap-1">
           {players.map((p) => (

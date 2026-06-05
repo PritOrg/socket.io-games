@@ -5,6 +5,7 @@ export { default as PlayerBadge } from './PlayerBadge';
 export { default as ModeSelector } from './ModeSelector';
 export { default as LeaveButton } from './LeaveButton';
 export { default as RoomLobby } from './RoomLobby';
+export { default as GameLobby } from './GameLobby';
 export { default as WaitingLobby } from './WaitingLobby';
 export { default as RoomActionButtons } from './RoomActionButtons';
 export { default as ScoreBoard } from './ScoreBoard';

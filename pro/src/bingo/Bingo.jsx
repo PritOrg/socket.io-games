@@ -86,15 +86,12 @@ const Bingo = () => {
       setRoomId(savedRoomId);
     }
 
-    let roomLoaded = false;
-
     // recovery: emit requestRoomInfo if roomId exists but we haven't received roomInfo yet
     if (roomId && !hasSavedReconnect) {
       socket.emit('bingo_requestRoomInfo', roomId);
     }
 
     socket.on('bingo_roomInfo', ({ id, creator, players, gameState, currentTurn, strikedNumbers }) => {
-      roomLoaded = true;
       logger.socket('⬅️', 'bingo_roomInfo', { roomId: id, gameState });
       setRoomId(id);
       setPlayers(players);

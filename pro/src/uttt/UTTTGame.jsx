@@ -49,10 +49,16 @@ const UTTTGame = () => {
     logger.info('UTTT', `Socket connected: ${socket.id}`);
 
     const saved = sessionStorage.getItem('uttt_reconnect');
-    if (saved && !roomId) {
+    const hasSavedReconnect = saved && !roomId;
+    if (hasSavedReconnect) {
       const { roomId: savedRoomId, playerId } = JSON.parse(saved);
       logger.socket('➡️', 'uttt_reconnect', { roomId: savedRoomId, playerId });
       socket.emit('uttt_reconnect', { roomId: savedRoomId, playerId });
+    }
+
+    // recovery: emit requestRoomInfo if roomId exists but we haven't received roomInfo yet
+    if (roomId && !hasSavedReconnect) {
+      socket.emit('uttt_requestRoomInfo', roomId);
     }
 
     socket.on('uttt_roomInfo', (room) => {
@@ -229,6 +235,19 @@ const UTTTGame = () => {
       });
     });
 
+    socket.on('server_shutdown', ({ message }) => {
+      Swal.fire({
+        title: 'Server Shutting Down',
+        text: message || 'The server is going down for maintenance.',
+        icon: 'info',
+        customClass: { popup: sketchPopupClass },
+      }).then(() => {
+        sessionStorage.removeItem('uttt_reconnect');
+        clearRoomId(roomId);
+        navigate('/');
+      });
+    });
+
     return () => {
       socket.off('uttt_roomInfo');
       socket.off('uttt_gameStarted');
@@ -237,8 +256,9 @@ const UTTTGame = () => {
       socket.off('uttt_playerLeft');
       socket.off('uttt_gamePaused');
       socket.off('uttt_alert');
+      socket.off('server_shutdown');
     };
-  }, [socket, setRoomId, playWin, roomId, players]);
+  }, [socket, setRoomId, playWin, roomId, players, navigate]);
 
   const handleCellClick = (gridIndex, squareIndex) => {
     if (gameState === 'playing' && currentTurn === socket?.id) {

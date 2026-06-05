@@ -16,7 +16,7 @@ import { Trophy, Copy, Share2 } from 'lucide-react';
 import { PlayerAvatar } from '../components/ui/AvatarSelector';
 
 const TicTacToe = () => {
-  const { socket, playerName, roomId, setRoomId, clearRoomId, profile, setProfile } = useGameContext();
+  const { socket, playerName, roomId, setRoomId, clearRoomId, setGamePrefix, profile, setProfile } = useGameContext();
   const [board, setBoard] = useState(Array(9).fill(null));
   const [players, setPlayers] = useState([]);
   const [currentTurn, setCurrentTurn] = useState(null);
@@ -32,10 +32,18 @@ const TicTacToe = () => {
   useEffect(() => {
     if (!socket) return;
 
+    setGamePrefix('ttt');
+
     const saved = sessionStorage.getItem('ttt_reconnect');
-    if (saved && !roomId) {
+    const hasSavedReconnect = saved && !roomId;
+    if (hasSavedReconnect) {
       const { roomId: savedRoomId, playerId } = JSON.parse(saved);
       socket.emit('ttt_reconnect', { roomId: savedRoomId, playerId });
+    }
+
+    // recovery: emit requestRoomInfo if roomId exists but we haven't received roomInfo yet
+    if (roomId && !hasSavedReconnect) {
+      socket.emit('ttt_requestRoomInfo', roomId);
     }
 
     socket.on('ttt_roomInfo', ({ id, players, gameState, currentTurn, board }) => {
@@ -119,6 +127,19 @@ const TicTacToe = () => {
       Swal.fire({ icon, title, text, customClass: { popup: sketchPopupClass } });
     });
 
+    socket.on('server_shutdown', ({ message }) => {
+      Swal.fire({
+        title: 'Server Shutting Down',
+        text: message || 'The server is going down for maintenance.',
+        icon: 'info',
+        customClass: { popup: sketchPopupClass },
+      }).then(() => {
+        sessionStorage.removeItem('ttt_reconnect');
+        clearRoomId(roomId);
+        navigate('/');
+      });
+    });
+
     return () => {
       socket.off('ttt_roomInfo');
       socket.off('ttt_gameStarted');
@@ -130,8 +151,9 @@ const TicTacToe = () => {
       socket.off('ttt_playerLeft');
       socket.off('ttt_gamePaused');
       socket.off('ttt_alert');
+      socket.off('server_shutdown');
     };
-  }, [socket, setRoomId, playMove, playWin, roomId]);
+  }, [socket, setRoomId, playMove, playWin, roomId, navigate]);
 
   const handleCellClick = (position) => {
     if (gameState === 'playing' && currentTurn === socket?.id && !board[position]) {

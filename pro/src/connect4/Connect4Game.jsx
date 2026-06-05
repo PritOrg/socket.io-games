@@ -6,7 +6,7 @@ import RoomLobby from '../components/ui/RoomLobby';
 import MatchReport from '../components/ui/MatchReport';
 import SketchButton from '../components/ui/SketchButton';
 import TurnIndicator from '../components/ui/TurnIndicator';
-import { AvatarSelector, AvatarReactionBar } from '../components/ui';
+import { AvatarSelector, AvatarReactionBar, sketchPopupClass } from '../components/ui';
 import Swal from 'sweetalert2';
 import useSound from 'use-sound';
 
@@ -35,10 +35,15 @@ const Connect4Game = () => {
       const data = JSON.parse(saved);
       socket.emit('c4_reconnect', data);
     }
-  }, [socket]);
+  }, [socket, setGamePrefix]);
 
   useEffect(() => {
     if (!socket) return;
+
+    // recovery: emit requestRoomInfo if roomId exists but we haven't received roomInfo yet
+    if (room && !reconnectAttempted.current) {
+      socket.emit('c4_requestRoomInfo', room.id);
+    }
 
     socket.on('c4_roomInfo', (data) => {
       setRoom(data);
@@ -91,6 +96,21 @@ const Connect4Game = () => {
       });
     });
 
+    socket.on('server_shutdown', ({ message }) => {
+      Swal.fire({
+        title: 'Server Shutting Down',
+        text: message || 'The server is going down for maintenance.',
+        icon: 'info',
+        customClass: { popup: sketchPopupClass },
+      }).then(() => {
+        sessionStorage.removeItem('c4_reconnect');
+        clearRoomId(room?.id);
+        setRoom(null);
+        setGameState('lobby');
+        navigate('/');
+      });
+    });
+
     return () => {
       socket.off('c4_roomInfo');
       socket.off('c4_gameStarted');
@@ -99,8 +119,9 @@ const Connect4Game = () => {
       socket.off('c4_gamePaused');
       socket.off('c4_gameRestarted');
       socket.off('c4_alert');
+      socket.off('server_shutdown');
     };
-  }, [socket]);
+  }, [socket, room?.id, playMove, playWin, clearRoomId, navigate]);
 
   const handleCreateRoom = () => {
     if (!socket) return;

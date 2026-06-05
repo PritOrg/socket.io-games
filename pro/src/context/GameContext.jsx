@@ -83,6 +83,16 @@ export const GameProvider = ({ children }) => {
     }
   };
 
+  const clearReconnect = (prefix) => {
+    sessionStorage.removeItem(`${prefix}_reconnect`);
+  };
+
+  const leaveRoom = (prefix, roomId) => {
+    socket?.emit(`${prefix}_leaveRoom`, roomId);
+    clearReconnect(prefix);
+    clearRoomId(roomId);
+  };
+
   const setPlayerProfileName = (name) => {
     setProfile((prev) => ({ ...prev, name }));
     setPlayerName(name);
@@ -99,6 +109,8 @@ export const GameProvider = ({ children }) => {
     socket,
     gamePrefix,
     setGamePrefix,
+    leaveRoom,
+    clearReconnect,
   };
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;

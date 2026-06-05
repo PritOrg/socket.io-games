@@ -57,7 +57,6 @@ const DabGame = () => {
   const [mode, setMode] = useState('classic');
   const [customRows, setCustomRows] = useState(5);
   const [customCols, setCustomCols] = useState(5);
-  const [customPlayers, setCustomPlayers] = useState(2);
   const [myPlayerIndex, setMyPlayerIndex] = useState(-1);
   const [isPaused, setIsPaused] = useState(false);
   const [redoRequest, setRedoRequest] = useState(null);
@@ -72,12 +71,11 @@ const DabGame = () => {
       mode,
       customRows,
       customCols,
-      customPlayers,
       playerName: profile.name || playerName,
       avatarIcon: profile.avatarIcon,
       color: profile.color,
     });
-  }, [mode, customRows, customCols, customPlayers, playerName, socket, profile]);
+  }, [mode, customRows, customCols, playerName, socket, profile]);
 
   const handleJoinRoom = useCallback(async () => {
     const { value: joinRoomId } = await Swal.fire({
@@ -291,6 +289,19 @@ const DabGame = () => {
       setRedoRequest(null);
     });
 
+    socket.on('server_shutdown', ({ message }) => {
+      Swal.fire({
+        title: 'Server Shutting Down',
+        text: message || 'The server is going down for maintenance.',
+        icon: 'info',
+        customClass: { popup: sketchPopupClass },
+      }).then(() => {
+        sessionStorage.removeItem('dab_reconnect');
+        clearRoomId();
+        navigate('/');
+      });
+    });
+
     return () => {
       socket.off('dab_roomInfo');
       socket.off('dab_gameStarted');
@@ -304,8 +315,9 @@ const DabGame = () => {
       socket.off('dab_redoCancelled');
       socket.off('dab_redoResponse');
       socket.off('dab_moveUndone');
+      socket.off('server_shutdown');
     };
-  }, [socket, rows, cols, players, playBox, playLine, setGamePrefix, setRoomId]);
+  }, [socket, rows, cols, players, playBox, playLine, setGamePrefix, setRoomId, navigate]);
 
   const handleLineClick = (lineType, r, c) => {
     if (gameState !== 'playing') return;
@@ -473,7 +485,7 @@ const DabGame = () => {
                   Players ({players.length})
                 </h3>
                 <div className="flex flex-wrap gap-3">
-                  {players.map((p, idx) => (
+                  {players.map((p) => (
                     <div
                       key={p.id}
                       className="flex items-center gap-2 sketch-border px-3 py-2"
