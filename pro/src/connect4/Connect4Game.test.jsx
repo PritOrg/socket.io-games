@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Connect4Game from './Connect4Game';
+import { ThemeProvider } from '../context/ThemeContext';
 
 vi.mock('socket.io-client', () => ({
   io: vi.fn(() => ({
@@ -22,7 +23,13 @@ vi.mock('../context/GameContext', () => ({
     },
     playerName: 'TestPlayer',
     setPlayerName: vi.fn(),
+    roomId: null,
+    setRoomId: vi.fn(),
     clearRoomId: vi.fn(),
+    gamePrefix: null,
+    setGamePrefix: vi.fn(),
+    leaveRoom: vi.fn(),
+    clearReconnect: vi.fn(),
     profile: { name: 'TestPlayer', avatarIcon: 'cat', color: '#2a2a3e' },
     setProfile: vi.fn(),
   }),
@@ -47,17 +54,19 @@ vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }) => <>{children}</>,
 }));
 
+const Wrapper = ({ children }) => (
+  <ThemeProvider>
+    <MemoryRouter>{children}</MemoryRouter>
+  </ThemeProvider>
+);
+
 describe('Connect4Game', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('renders landing UI when not in room', () => {
-    render(
-      <MemoryRouter>
-        <Connect4Game />
-      </MemoryRouter>,
-    );
+    render(<Connect4Game />, { wrapper: Wrapper });
     expect(screen.getByText('Connect 4')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Enter name')).toBeInTheDocument();
   });

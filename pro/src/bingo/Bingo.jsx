@@ -13,8 +13,8 @@ import confetti from 'canvas-confetti';
 import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
 import { Users, Trophy, SwatchBook, Timer } from 'lucide-react';
-import { PlayerAvatar } from '../components/ui/AvatarSelector';
-import logger from '../utils/logger';
+import useSocketListeners from '../hooks/useSocketListeners';
+import useReconnection from '../hooks/useReconnection';
 
 const PLAYER_COLORS = ['#2a2a3e', '#c73e1d', '#2d4a8f', '#2f5233'];
 
@@ -31,27 +31,7 @@ const Bingo = () => {
 
   const strikedNumbersRef = useRef([]);
   const [playPop] = useSound('/sounds/pop.mp3', { volume: 0.5 });
-  const [playWin] = useSound('/sounds/win.mp3', { volume: 0.7 });
   const [playTurn] = useSound('/sounds/turn.mp3', { volume: 0.6 });
-
-  useEffect(() => {
-    let timerInterval;
-    if (gameState === 'playing' && currentTurn === socket?.id && turnTimer > 0) {
-      timerInterval = setInterval(() => {
-        setTurnTimer((prev) => prev - 1);
-      }, 1000);
-    }
-    return () => clearInterval(timerInterval);
-  }, [gameState, currentTurn, socket?.id, turnTimer]);
-
-  const generateBoard = useCallback(() => {
-    const nums = Array.from({ length: 25 }, (_, i) => i + 1);
-    for (let i = nums.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [nums[i], nums[j]] = [nums[j], nums[i]];
-    }
-    return nums;
-  }, []);
 
   const calculateBingoProgress = useCallback((boardNumbers) => {
     const size = 5;
@@ -72,6 +52,155 @@ const Bingo = () => {
     return 'BINGO'.slice(0, Math.min(completedLinesCount, 5));
   }, []);
 
+  const { clearReconnect } = useReconnection({
+    socket,
+    gamePrefix: 'bingo',
+    roomId,
+    onRestore: (room) => {
+      if (!room) return;
+      setRoomId(room.id);
+      setPlayers(room.players || []);
+      setGameState(room.gameState || 'waiting');
+      setCurrentTurn(room.currentTurn);
+      setIsCreator(room.creator === socket.id);
+    },
+  });
+
+  useSocketListeners(
+    socket,
+    {
+      bingo_roomInfo: ({ id, creator, players, gameState, currentTurn, strikedNumbers }) => {
+        setRoomId(id);
+        setPlayers(players);
+        setGameState(gameState);
+        setCurrentTurn(currentTurn);
+        setIsCreator(creator === socket.id);
+
+        const savedBoard = localStorage.getItem(`bingo_board_${id}`);
+        if (savedBoard) {
+          setNumbers(JSON.parse(savedBoard));
+        }
+
+        if (strikedNumbers) {
+          strikedNumbersRef.current = strikedNumbers;
+        }
+      },
+      bingo_playerBoard: ({ board }) => {
+        const sn = strikedNumbersRef.current;
+        const updatedBoard = sn.length > 0 ? board.map((n) => (sn.includes(n) ? 'X' : n)) : board;
+        setNumbers(updatedBoard);
+        localStorage.setItem(`bingo_board_${roomId}`, JSON.stringify(board));
+      },
+      bingo_gamePaused: ({ reason }) => {
+        Swal.fire({
+          title: 'Game Paused',
+          text: reason,
+          icon: 'warning',
+          customClass: { popup: sketchPopupClass },
+        });
+      },
+      bingo_gameStarted: ({ firstPlayerId, playerBoards }) => {
+        setGameState('playing');
+        setCurrentTurn(firstPlayerId);
+        setTurnTimer(30);
+        setStrikedOut('');
+
+        if (playerBoards?.[socket.id]) {
+          setNumbers(playerBoards[socket.id]);
+          localStorage.setItem(`bingo_board_${roomId}`, JSON.stringify(playerBoards[socket.id]));
+        }
+
+        Swal.fire({
+          title: 'Eyes Down!',
+          text: 'Bingo has started!',
+          timer: 1500,
+          showConfirmButton: false,
+          customClass: { popup: sketchPopupClass },
+        });
+      },
+      bingo_gameRestarted: () => {
+        setGameState('ready');
+        setStrikedOut('');
+        setNumbers((prev) => {
+          const fresh = prev.map((n) => (typeof n === 'number' ? n : n));
+          localStorage.setItem(`bingo_board_${roomId}`, JSON.stringify(fresh));
+          return fresh;
+        });
+      },
+      bingo_numberMarked: ({ nextTurn, strikedNumbers }) => {
+        setNumbers((prev) => prev.map((n) => (strikedNumbers.includes(n) ? 'X' : n)));
+        setCurrentTurn(nextTurn);
+        playPop();
+      },
+      bingo_nextTurn: ({ nextPlayerId, timestamp }) => {
+        setCurrentTurn(nextPlayerId);
+        const elapsed = Math.floor((Date.now() - timestamp) / 1000);
+        setTurnTimer(Math.max(0, 30 - elapsed));
+        if (nextPlayerId === socket.id) {
+          playTurn();
+        }
+      },
+      bingo_playerWon: ({ winner }) => {
+        const playerColor = players.find((p) => p.id === winner)?.color || '#2a2a3e';
+        confetti({
+          particleCount: 150,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: [playerColor],
+        });
+        const winnerName = players.find((p) => p.id === winner)?.name || 'Someone';
+        Swal.fire({
+          title: 'BINGO!',
+          text: `${winnerName} has achieved Bingo!`,
+          icon: 'success',
+          customClass: { popup: sketchPopupClass },
+        });
+        setGameState('ended');
+        clearReconnect();
+      },
+      bingo_playerLeft: (_playerId) => {
+        Swal.fire({
+          title: 'Player Left',
+          text: 'A player has left the game.',
+          icon: 'warning',
+          customClass: { popup: sketchPopupClass },
+        });
+      },
+      bingo_alert: ({ icon, title, text }) => {
+        if (title === 'Room Created') {
+          Swal.fire({
+            icon,
+            title,
+            text,
+            timer: 2000,
+            showConfirmButton: false,
+            customClass: { popup: sketchPopupClass },
+          });
+        } else {
+          Swal.fire({
+            icon,
+            title,
+            text,
+            customClass: { popup: sketchPopupClass },
+          });
+        }
+      },
+      server_shutdown: ({ message }) => {
+        Swal.fire({
+          title: 'Server Shutting Down',
+          text: message || 'The server is going down for maintenance.',
+          icon: 'info',
+          customClass: { popup: sketchPopupClass },
+        }).then(() => {
+          clearReconnect();
+          clearRoomId(roomId);
+          navigate('/');
+        });
+      },
+    },
+    [roomId, players, playPop, playTurn, setRoomId, clearReconnect, clearRoomId, navigate],
+  );
+
   useEffect(() => {
     if (!socket) return;
 
@@ -81,7 +210,6 @@ const Bingo = () => {
     const hasSavedReconnect = saved && !roomId;
     if (hasSavedReconnect) {
       const { roomId: savedRoomId, playerId } = JSON.parse(saved);
-      logger.socket('➡️', 'bingo_reconnect', { roomId: savedRoomId, playerId });
       socket.emit('bingo_reconnect', { roomId: savedRoomId, playerId });
       setRoomId(savedRoomId);
     }
@@ -90,178 +218,7 @@ const Bingo = () => {
     if (roomId && !hasSavedReconnect) {
       socket.emit('bingo_requestRoomInfo', roomId);
     }
-
-    socket.on('bingo_roomInfo', ({ id, creator, players, gameState, currentTurn, strikedNumbers }) => {
-      logger.socket('⬅️', 'bingo_roomInfo', { roomId: id, gameState });
-      setRoomId(id);
-      setPlayers(players);
-      setGameState(gameState);
-      setCurrentTurn(currentTurn);
-      setIsCreator(creator === socket.id);
-
-      if (gameState === 'playing' && players.length > 0) {
-        const me = players.find((p) => p.id === socket.id);
-        if (me) sessionStorage.setItem('bingo_reconnect', JSON.stringify({ roomId: id, playerId: me.id }));
-      }
-
-      if (strikedNumbers) {
-        strikedNumbersRef.current = strikedNumbers;
-      }
-    });
-
-    socket.on('bingo_playerBoard', ({ board }) => {
-      logger.socket('⬅️', 'bingo_playerBoard', 'Received board from server');
-      const savedBoard = localStorage.getItem(`bingo_board_${roomId}`);
-      const rawBoard = savedBoard ? JSON.parse(savedBoard) : board;
-      const sn = strikedNumbersRef.current;
-      const updatedBoard = sn.length > 0 ? rawBoard.map((n) => (sn.includes(n) ? 'X' : n)) : rawBoard;
-      setNumbers(updatedBoard);
-      if (!savedBoard) {
-        localStorage.setItem(`bingo_board_${roomId}`, JSON.stringify(board));
-      }
-    });
-
-    socket.on('bingo_gamePaused', ({ reason }) => {
-      logger.socket('⬅️', 'bingo_gamePaused', { reason });
-      Swal.fire({
-        title: 'Game Paused',
-        text: reason,
-        icon: 'warning',
-        customClass: { popup: sketchPopupClass },
-      });
-    });
-
-    socket.on('bingo_gameStarted', ({ firstPlayerId, playerBoards }) => {
-      logger.socket('⬅️', 'bingo_gameStarted', { firstPlayerId });
-      setGameState('playing');
-      setCurrentTurn(firstPlayerId);
-      setTurnTimer(30);
-      setStrikedOut('');
-
-      const myBoard = playerBoards?.[socket.id];
-      if (myBoard) {
-        setNumbers(myBoard);
-        localStorage.setItem(`bingo_board_${roomId}`, JSON.stringify(myBoard));
-      }
-
-      Swal.fire({
-        title: 'Eyes Down!',
-        text: 'Bingo has started!',
-        timer: 1500,
-        showConfirmButton: false,
-        customClass: { popup: sketchPopupClass },
-      });
-    });
-
-    socket.on('bingo_gameRestarted', () => {
-      setGameState('ready');
-      setStrikedOut('');
-      sessionStorage.removeItem('bingo_reconnect');
-      setNumbers((prev) => {
-        const fresh = prev.map((n) => (typeof n === 'number' ? n : n));
-        localStorage.setItem(`bingo_board_${roomId}`, JSON.stringify(fresh));
-        return fresh;
-      });
-      Swal.fire({
-        title: 'Game Restarted',
-        text: 'Get ready for a new round!',
-        timer: 1500,
-        showConfirmButton: false,
-        customClass: { popup: sketchPopupClass },
-      });
-    });
-
-    socket.on('bingo_numberMarked', ({ nextTurn, strikedNumbers }) => {
-      setNumbers((prev) => prev.map((n) => (strikedNumbers.includes(n) ? 'X' : n)));
-      setCurrentTurn(nextTurn);
-      playPop();
-    });
-
-    socket.on('bingo_nextTurn', ({ nextPlayerId, timestamp }) => {
-      setCurrentTurn(nextPlayerId);
-      const elapsed = Math.floor((Date.now() - timestamp) / 1000);
-      setTurnTimer(Math.max(0, 30 - elapsed));
-      if (nextPlayerId === socket.id) {
-        playTurn();
-      }
-    });
-
-    socket.on('bingo_playerWon', ({ winner }) => {
-      playWin();
-      const playerColor = players.find((p) => p.id === winner)?.color || '#2a2a3e';
-      confetti({
-        particleCount: 150,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: [playerColor],
-      });
-      const winnerName = players.find((p) => p.id === winner)?.name || 'Someone';
-      Swal.fire({
-        title: 'BINGO!',
-        text: `${winnerName} has achieved Bingo!`,
-        icon: 'success',
-        customClass: { popup: sketchPopupClass },
-      });
-      setGameState('ended');
-      sessionStorage.removeItem('bingo_reconnect');
-    });
-
-    socket.on('bingo_playerLeft', (_playerId) => {
-      Swal.fire({
-        title: 'Player Left',
-        text: 'A player has left the game.',
-        icon: 'warning',
-        customClass: { popup: sketchPopupClass },
-      });
-    });
-
-    socket.on('bingo_alert', ({ icon, title, text }) => {
-      if (title === 'Room Created') {
-        Swal.fire({
-          icon,
-          title,
-          text,
-          timer: 2000,
-          showConfirmButton: false,
-          customClass: { popup: sketchPopupClass },
-        });
-      } else {
-        Swal.fire({
-          icon,
-          title,
-          text,
-          customClass: { popup: sketchPopupClass },
-        });
-      }
-    });
-
-    socket.on('server_shutdown', ({ message }) => {
-      Swal.fire({
-        title: 'Server Shutting Down',
-        text: message || 'The server is going down for maintenance.',
-        icon: 'info',
-        customClass: { popup: sketchPopupClass },
-      }).then(() => {
-        sessionStorage.removeItem('bingo_reconnect');
-        clearRoomId(roomId);
-        navigate('/');
-      });
-    });
-
-    return () => {
-      socket.off('bingo_roomInfo');
-      socket.off('bingo_playerBoard');
-      socket.off('bingo_gameStarted');
-      socket.off('bingo_gameRestarted');
-      socket.off('bingo_numberMarked');
-      socket.off('bingo_nextTurn');
-      socket.off('bingo_playerWon');
-      socket.off('bingo_playerLeft');
-      socket.off('bingo_gamePaused');
-      socket.off('bingo_alert');
-      socket.off('server_shutdown');
-    };
-  }, [socket, roomId, playPop, playWin, playTurn, generateBoard, players, setGamePrefix, clearRoomId, navigate]);
+  }, [socket, roomId, setGamePrefix, setRoomId]);
 
   useEffect(() => {
     if (gameState !== 'playing' || numbers.length !== 25) return;
@@ -273,25 +230,38 @@ const Bingo = () => {
         socket.emit('bingo_achieved', roomId);
       }
     }
-  }, [socket, numbers, gameState, strikedOut, roomId, calculateBingoProgress]);
+  }, [socket, numbers, gameState, strikedOut, calculateBingoProgress, roomId]);
 
-  const handleCellClick = (number) => {
-    if (gameState !== 'playing') return;
-    if (currentTurn !== socket?.id) return;
-    if (typeof number === 'string') return;
+  useEffect(() => {
+    let timerInterval;
+    if (gameState === 'playing' && currentTurn === socket?.id && turnTimer > 0) {
+      timerInterval = setInterval(() => {
+        setTurnTimer((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timerInterval);
+  }, [gameState, currentTurn, socket?.id, turnTimer]);
 
-    socket.emit('bingo_markNumber', { roomId, number });
-  };
+  const handleCellClick = useCallback(
+    (number) => {
+      if (gameState !== 'playing') return;
+      if (currentTurn !== socket?.id) return;
+      if (typeof number === 'string') return;
 
-  const handleCreateRoom = () => {
+      socket.emit('bingo_markNumber', { roomId, number });
+    },
+    [gameState, currentTurn, roomId, socket],
+  );
+
+  const handleCreateRoom = useCallback(() => {
     socket.emit('bingo_createRoom', {
       creatorName: profile.name,
       avatarIcon: profile.avatarIcon,
       color: profile.color,
     });
-  };
+  }, [socket, profile]);
 
-  const handleJoinRoom = async () => {
+  const handleJoinRoom = useCallback(async () => {
     const { value: joinRoomId } = await Swal.fire({
       title: 'Join Bingo Room',
       input: 'text',
@@ -307,9 +277,9 @@ const Bingo = () => {
         color: profile.color,
       });
     }
-  };
+  }, [socket, profile]);
 
-  const handleStartGame = () => {
+  const handleStartGame = useCallback(() => {
     if (players.length < 2) {
       Swal.fire({
         title: 'Wait!',
@@ -319,25 +289,24 @@ const Bingo = () => {
       return;
     }
     socket.emit('bingo_startGame', roomId);
-  };
+  }, [socket, roomId, players.length]);
 
-  const handleLeaveRoom = () => {
-    Swal.fire({
+  const handleLeaveRoom = useCallback(async () => {
+    const result = await Swal.fire({
       title: 'Leave Game?',
       text: 'Are you sure you want to leave?',
       icon: 'warning',
       showCancelButton: true,
       confirmButtonText: 'Yes, leave',
       customClass: { popup: sketchPopupClass },
-    }).then((result) => {
-      if (result.isConfirmed) {
-        socket.emit('bingo_leaveRoom', roomId);
-        sessionStorage.removeItem('bingo_reconnect');
-        clearRoomId(roomId);
-        navigate('/');
-      }
     });
-  };
+    if (result.isConfirmed) {
+      socket.emit('bingo_leaveRoom', roomId);
+      clearReconnect();
+      clearRoomId(roomId);
+      navigate('/');
+    }
+  }, [socket, roomId, clearReconnect, clearRoomId, navigate]);
 
   return (
     <GameLayout players={players}>
@@ -416,16 +385,22 @@ const Bingo = () => {
                   {players.map((p, i) => (
                     <div
                       key={p.id}
-                      className={`flex items-center justify-between p-2 rounded-lg transition-all
-                    ${p.id === currentTurn ? 'scale-105' : 'opacity-40'}`}
-                      style={{ color: p.color || PLAYER_COLORS[i % PLAYER_COLORS.length] }}
+                      className={`flex items-center justify-between p-2 rounded border-2 border-dashed ${
+                        p.id === currentTurn && gameState === 'playing'
+                          ? 'border-current bg-yellow-50'
+                          : 'border-gray-300'
+                      }`}
+                      style={{
+                        color: players[i]?.color || PLAYER_COLORS[i % PLAYER_COLORS.length],
+                        transform: `rotate(${i % 2 ? 0.5 : -0.5}deg)`,
+                      }}
                     >
                       <div className="flex items-center gap-2">
-                        <PlayerAvatar avatarIcon={p.avatarIcon} color={p.color} size={20} />
-                        <span className="font-bold font-handwriting truncate flex-1">{p.name}</span>
+                        <span className="font-handwriting font-bold">
+                          {p.name}
+                          {p.id === socket?.id && ' (You)'}
+                        </span>
                       </div>
-                      {p.id === socket?.id && <span className="text-xs text-gray-500">(You)</span>}
-                      {p.id === currentTurn && <Users size={16} className="text-ink animate-pulse" />}
                     </div>
                   ))}
                 </div>

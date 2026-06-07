@@ -3,7 +3,7 @@ import { ArrowLeft } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
 import { sketchPopupClass } from './SketchPopup';
-import { useGameContext } from '../context/GameContext';
+import { useGameContext } from '../../context/GameContext';
 import ThemeToggle from './ThemeToggle';
 
 const GameLayout = ({ players = [], children }) => {

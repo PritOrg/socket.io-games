@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import io from 'socket.io-client';
 import logger from '../utils/logger';
 
-const GameContext = createContext();
+export const GameContext = createContext();
 
 export const useGameContext = () => {
   const context = useContext(GameContext);

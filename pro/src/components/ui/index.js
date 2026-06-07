@@ -17,3 +17,4 @@ export { default as TurnIndicator } from './TurnIndicator';
 export { default as MatchReport } from './MatchReport';
 export { default as AvatarSelector, PlayerAvatar } from './AvatarSelector';
 export { default as CountdownOverlay } from './CountdownOverlay';
+export { default as UndoUI } from './UndoUI';

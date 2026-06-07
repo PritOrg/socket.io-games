@@ -3,6 +3,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import TicTacToe from './TicTacToe';
 import { GameProvider } from '../context/GameContext';
+import { ThemeProvider } from '../context/ThemeContext';
 import { BrowserRouter } from 'react-router-dom';
 
 const mockSocket = {
@@ -19,9 +20,11 @@ vi.mock('canvas-confetti', () => ({ default: vi.fn() }));
 vi.mock('sweetalert2', () => ({ default: { fire: vi.fn().mockResolvedValue({ isConfirmed: true }) } }));
 
 const Wrapper = ({ children }) => (
-  <GameProvider>
-    <BrowserRouter>{children}</BrowserRouter>
-  </GameProvider>
+  <ThemeProvider>
+    <GameProvider>
+      <BrowserRouter>{children}</BrowserRouter>
+    </GameProvider>
+  </ThemeProvider>
 );
 
 const findEventCb = (event) => {

@@ -1,238 +1,226 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useGameContext } from '../context/GameContext';
 import { useNavigate } from 'react-router-dom';
 import GameLayout from '../components/ui/GameLayout';
-import RoomLobby from '../components/ui/RoomLobby';
+import GameLobby from '../components/ui/GameLobby';
 import MatchReport from '../components/ui/MatchReport';
 import SketchButton from '../components/ui/SketchButton';
 import TurnIndicator from '../components/ui/TurnIndicator';
-import { sketchPopupClass } from '../components/ui';
+import { sketchPopupClass, AvatarSelector } from '../components/ui';
+import useSocketListeners from '../hooks/useSocketListeners';
+import useReconnection from '../hooks/useReconnection';
 import Swal from 'sweetalert2';
+
 const SOSGame = () => {
-  const { socket, playerName, clearRoomId, setGamePrefix, profile, setProfile } = useGameContext();
+  const { socket, playerName, roomId, setRoomId, clearRoomId, setGamePrefix, profile, setProfile } = useGameContext();
   const navigate = useNavigate();
   const [gameState, setGameState] = useState('lobby');
-  const [room, setRoom] = useState(null);
+  const [players, setPlayers] = useState([]);
+  const [spectators, setSpectators] = useState([]);
+  const [currentTurn, setCurrentTurn] = useState(null);
   const [selectedSymbol, setSelectedSymbol] = useState('S');
   const [flashCells, setFlashCells] = useState([]);
   const [desiredSize, setDesiredSize] = useState(6);
+  const [board, setBoard] = useState([]);
+  const [myPlayerIndex, setMyPlayerIndex] = useState(-1);
   const joinRoomIdRef = useRef('');
-  const reconnectAttempted = useRef(false);
   const roomLoadedRef = useRef(false);
 
-  useEffect(() => {
-    if (!socket) return;
-
-    setGamePrefix('sos');
-
-    const saved = sessionStorage.getItem('sos_reconnect');
-    if (saved && !reconnectAttempted.current) {
-      reconnectAttempted.current = true;
-      const data = JSON.parse(saved);
-      socket.emit('sos_reconnect', data);
-    }
-  }, [socket, setGamePrefix]);
-
-  useEffect(() => {
-    if (!socket) return;
-
-    // recovery: emit requestRoomInfo if roomId exists but we haven't received roomInfo yet
-    if (room?.id && !roomLoadedRef.current) {
-      socket.emit('sos_requestRoomInfo', room.id);
-    }
-
-    socket.on('sos_roomInfo', (data) => {
-      roomLoadedRef.current = true;
-      setRoom(data);
-      if (data.gameState === 'playing') {
-        setGameState('playing');
-      }
-      const myPlayer = data.players?.find((p) => p.id === socket.id);
-      sessionStorage.setItem(
-        'sos_reconnect',
-        JSON.stringify({
-          roomId: data.id,
-          playerId: myPlayer?.id || socket.id,
-        }),
-      );
-    });
-
-    socket.on('sos_gameStarted', () => {
-      setGameState('playing');
-    });
-
-    socket.on('sos_moveMade', (data) => {
-      setRoom((prev) => ({ ...prev, ...data }));
-      if (data.patterns && data.patterns.length > 0) {
-        const cells = data.patterns.flatMap((p) => p.cells.map((c) => `${c.row}-${c.col}`));
-        setFlashCells(cells);
-        setTimeout(() => setFlashCells([]), 2000);
-      }
-    });
-
-    socket.on('sos_gameOver', (_data) => {
-      setGameState('ended');
-    });
-
-    socket.on('sos_gamePaused', () => {
-      setGameState('paused');
-    });
-
-    socket.on('sos_gameRestarted', () => {
-      setGameState('lobby');
-      setSelectedSymbol('S');
-    });
-
-    socket.on('sos_alert', ({ icon, title, text }) => {
-      Swal.fire({
-        icon,
-        title,
-        text,
-      });
-    });
-
-    socket.on('sos_scoreFlash', (_data) => {
-      // Score flash is already handled via sos_moveMade with patterns
-    });
-
-    socket.on('server_shutdown', ({ message }) => {
-      Swal.fire({
-        title: 'Server Shutting Down',
-        text: message || 'The server is going down for maintenance.',
-        icon: 'info',
-        customClass: { popup: sketchPopupClass },
-      }).then(() => {
-        sessionStorage.removeItem('sos_reconnect');
-        clearRoomId(room?.id);
-        setRoom(null);
-        setGameState('lobby');
-        navigate('/');
-      });
-    });
-
-    return () => {
-      socket.off('sos_roomInfo');
-      socket.off('sos_gameStarted');
-      socket.off('sos_moveMade');
-      socket.off('sos_gameOver');
-      socket.off('sos_gamePaused');
-      socket.off('sos_gameRestarted');
-      socket.off('sos_alert');
-      socket.off('sos_scoreFlash');
-      socket.off('server_shutdown');
-    };
-  }, [socket, room?.id, navigate]);
-
-  const handleCreateRoom = (size) => {
+  const handleCreateRoom = useCallback(() => {
     if (!socket) return;
     socket.emit('sos_createRoom', {
       playerName: profile.name || playerName,
       avatarIcon: profile.avatarIcon,
       color: profile.color,
-      size,
+      size: desiredSize,
     });
-  };
+  }, [socket, profile, playerName, desiredSize]);
 
-  const handleJoinRoom = (roomIdToJoin, asSpectator) => {
+  const handleJoinRoom = useCallback(
+    (roomIdToJoin, asSpectator) => {
+      if (!socket) return;
+      socket.emit('sos_joinRoom', {
+        roomId: roomIdToJoin,
+        playerName: profile.name || playerName,
+        avatarIcon: profile.avatarIcon,
+        color: profile.color,
+        asSpectator,
+      });
+    },
+    [socket, profile, playerName],
+  );
+
+  const { clearReconnect } = useReconnection({
+    socket,
+    gamePrefix: 'sos',
+    roomId,
+    onRestore: (room, myPlayer) => {
+      if (!room) return;
+      setRoomId(room.id);
+      setPlayers(room.players || []);
+      setSpectators(room.spectators || []);
+      setGameState(room.gameState || 'lobby');
+      setCurrentTurn(room.currentTurn);
+      setBoard(room.board || []);
+      setMyPlayerIndex(myPlayer ? (room.players || []).findIndex((p) => p.id === myPlayer.id) : -1);
+    },
+  });
+
+  useSocketListeners(
+    socket,
+    {
+      sos_roomInfo: (data) => {
+        roomLoadedRef.current = true;
+        setRoomId(data.id);
+        setPlayers(data.players || []);
+        setSpectators(data.spectators || []);
+        setGameState(data.gameState);
+        setCurrentTurn(data.currentTurn);
+        setBoard(data.board || []);
+        const myPlayer = data.players?.find((p) => p.id === socket.id);
+        setMyPlayerIndex(myPlayer ? data.players.findIndex((p) => p.id === myPlayer.id) : -1);
+      },
+      sos_gameStarted: () => {
+        setGameState('playing');
+      },
+      sos_moveMade: (data) => {
+        setBoard(data.board || []);
+        if (data.patterns && data.patterns.length > 0) {
+          const cells = data.patterns.flatMap((p) => p.cells.map((c) => `${c.row}-${c.col}`));
+          setFlashCells(cells);
+          setTimeout(() => setFlashCells([]), 2000);
+        }
+      },
+      sos_gameOver: () => {
+        setGameState('ended');
+      },
+      sos_gamePaused: () => {
+        setGameState('paused');
+      },
+      sos_gameRestarted: () => {
+        setGameState('waiting');
+        setSelectedSymbol('S');
+        setBoard([]);
+      },
+      sos_alert: ({ icon, title, text }) => {
+        Swal.fire({ icon, title, text });
+      },
+      server_shutdown: ({ message }) => {
+        Swal.fire({
+          title: 'Server Shutting Down',
+          text: message || 'The server is going down for maintenance.',
+          icon: 'info',
+          customClass: { popup: sketchPopupClass },
+        }).then(() => {
+          sessionStorage.removeItem('sos_reconnect');
+          clearRoomId();
+          navigate('/');
+        });
+      },
+    },
+    [clearRoomId, navigate, setRoomId],
+  );
+
+  useEffect(() => {
     if (!socket) return;
-    socket.emit('sos_joinRoom', {
-      roomId: roomIdToJoin,
-      playerName: profile.name || playerName,
-      avatarIcon: profile.avatarIcon,
-      color: profile.color,
-      asSpectator,
-    });
-  };
+    setGamePrefix('sos');
 
-  const handleStartGame = () => {
-    if (!socket || !room) return;
-    socket.emit('sos_startGame', { roomId: room.id });
-  };
+    const saved = sessionStorage.getItem('sos_reconnect');
+    if (saved && !roomLoadedRef.current) {
+      roomLoadedRef.current = true;
+      const data = JSON.parse(saved);
+      socket.emit('sos_reconnect', data);
+    }
+  }, [socket, setGamePrefix]);
 
-  const handleRestart = () => {
-    if (!socket || !room) return;
-    socket.emit('sos_restartGame', room.id);
-  };
+  const handleStartGame = useCallback(() => {
+    if (!socket || !roomId) return;
+    socket.emit('sos_startGame', { roomId });
+  }, [socket, roomId]);
 
-  const handleLeave = () => {
-    if (!socket || !room) return;
-    socket.emit('sos_leaveRoom', room.id);
-    sessionStorage.removeItem('sos_reconnect');
+  const handleRestart = useCallback(() => {
+    if (!socket || !roomId) return;
+    socket.emit('sos_restartGame', roomId);
+  }, [socket, roomId]);
+
+  const handleLeave = useCallback(() => {
+    if (!socket || !roomId) return;
+    socket.emit('sos_leaveRoom', roomId);
+    clearReconnect();
     clearRoomId();
-    setRoom(null);
     setGameState('lobby');
     navigate('/');
-  };
+  }, [socket, roomId, clearReconnect, clearRoomId, navigate]);
 
-  const handleCellClick = (row, col) => {
-    if (!room || gameState !== 'playing') return;
-    const myPlayerIndex = room.players.findIndex((p) => p.id === socket.id);
-    if (myPlayerIndex === -1 && !room.spectators?.find((s) => s.id === socket.id)) return;
-    if (myPlayerIndex !== room.currentTurn) return;
-    if (room.board[row][col] !== null) return;
+  const handleCellClick = useCallback(
+    (row, col) => {
+      if (!roomId || gameState !== 'playing') return;
+      if (myPlayerIndex !== currentTurn) return;
+      if (board[row]?.[col] !== null) return;
 
-    socket.emit('sos_makeMove', { roomId: room.id, row, col, value: selectedSymbol });
-  };
+      socket.emit('sos_makeMove', { roomId, row, col, value: selectedSymbol });
+    },
+    [roomId, gameState, myPlayerIndex, currentTurn, board, selectedSymbol, socket],
+  );
 
-  const isSpectator = room?.spectators?.some((s) => s.id === socket.id);
-  const isHost = room && room.creator === socket.id;
+  const isSpectator = spectators.some((s) => s.id === socket?.id);
+  const isHost = players[0]?.id === socket?.id;
 
-  if (gameState === 'ended' && room) {
-    const myPlayer = room.players.find((p) => p.id === socket.id);
-    const isWinner = room.winner === myPlayer?.id;
+  if (gameState === 'ended') {
+    const scores = players.map((p, idx) => ({
+      name: p.name || `Player ${idx + 1}`,
+      score: p.score || 0,
+    }));
     return (
-      <MatchReport
-        winner={room.winner}
-        isWinner={isWinner}
-        scores={room.scores}
-        onRematch={handleRestart}
-        onLeave={handleLeave}
-      />
+      <MatchReport winner={null} isWinner={false} scores={scores} onRematch={handleRestart} onLeave={handleLeave} />
     );
   }
 
-  if (room && room.gameState === 'waiting') {
+  if (roomId && gameState === 'waiting') {
     return (
-      <RoomLobby
-        roomId={room.id}
-        players={room.players}
-        spectators={room.spectators}
-        isHost={isHost}
+      <GameLobby
+        gameName="SOS"
+        roomId={roomId}
+        players={players}
+        spectators={spectators}
+        isHost={!!isHost}
         minPlayers={2}
         onStart={handleStartGame}
         onLeave={handleLeave}
-        gameName="SOS"
+        showJoinInput
+        startLabel="Start Game"
+        profile={profile}
+        onProfileChange={(next) => setProfile(next)}
       />
     );
   }
 
-  if (room && gameState === 'playing') {
+  if (roomId && gameState === 'playing') {
+    const size = board.length || desiredSize;
     return (
-      <GameLayout players={room.players}>
+      <GameLayout players={players}>
         <div className="flex flex-col items-center gap-4 p-4">
           {isSpectator && (
             <div className="sketch-card px-4 py-2 bg-blue-100">
               <span className="paper-font text-blue-700 font-semibold">👁️ Spectating</span>
             </div>
           )}
-          <TurnIndicator players={room.players} currentTurn={room.currentTurn} scores={room.scores} />
+          <TurnIndicator players={players} currentTurn={currentTurn} />
           <div className="paper-font text-sm text-ink/60">
-            Moves: {room.moveCount} / {room.size * room.size}
+            Moves: {board.flat().filter((c) => c).length} / {size * size}
           </div>
           <div
             className="grid gap-1 p-4 sketch-card"
-            style={{
-              gridTemplateColumns: `repeat(${room.size}, minmax(32px, 1fr))`,
-            }}
+            style={{ gridTemplateColumns: `repeat(${size}, minmax(32px, 1fr))` }}
           >
-            {room.board.map((row, r) =>
+            {board.map((row, r) =>
               row.map((cell, c) => {
                 const isFlashing = flashCells.includes(`${r}-${c}`);
                 return (
                   <button
                     key={`${r}-${c}`}
                     onClick={() => handleCellClick(r, c)}
-                    disabled={room.currentTurn !== room.players.findIndex((p) => p.id === socket.id)}
+                    disabled={myPlayerIndex !== currentTurn}
                     className={`w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center text-2xl font-sketch border-2 border-ink/20 hover:bg-paper-dark rounded sketch-transition ${
                       isFlashing ? 'bg-yellow-200' : ''
                     }`}
@@ -301,7 +289,14 @@ const SOSGame = () => {
           </select>
         </div>
 
-        <SketchButton onClick={() => handleCreateRoom(desiredSize)} className="w-full">
+        <AvatarSelector
+          avatarIcon={profile.avatarIcon}
+          color={profile.color}
+          onAvatarChange={(icon) => setProfile({ ...profile, avatarIcon: icon })}
+          onColorChange={(c) => setProfile({ ...profile, color: c })}
+        />
+
+        <SketchButton onClick={handleCreateRoom} className="w-full">
           Create Room
         </SketchButton>
 

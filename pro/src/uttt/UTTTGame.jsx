@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useGameContext } from '../context/GameContext';
 import {
   SketchButton,
@@ -8,6 +8,8 @@ import {
   AvatarSelector,
   ScoreBoard,
   AvatarReactionBar,
+  MatchReport,
+  GameLobby,
 } from '../components/ui';
 import useSound from 'use-sound';
 import confetti from 'canvas-confetti';
@@ -15,13 +17,16 @@ import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
 import { Users, Trophy, Grid3X3, Sparkles } from 'lucide-react';
 import MacroGrid from './components/MacroGrid';
+import useSocketListeners from '../hooks/useSocketListeners';
+import useReconnection from '../hooks/useReconnection';
 import logger from '../utils/logger';
 
 const PLAYER_COLORS = ['#1a1a2e', '#c73e1d'];
 
 const UTTTGame = () => {
-  const { socket, playerName, roomId, setRoomId, clearRoomId, profile, setProfile, setGamePrefix } = useGameContext();
+  const { socket, roomId, setRoomId, clearRoomId, profile, setProfile, setGamePrefix } = useGameContext();
   const [players, setPlayers] = useState([]);
+  const [spectators, setSpectators] = useState([]);
   const [currentTurn, setCurrentTurn] = useState(null);
   const [gameState, setGameState] = useState('waiting');
   const [board, setBoard] = useState(
@@ -35,252 +40,22 @@ const UTTTGame = () => {
   const [lastMove, setLastMove] = useState(null);
   const [, setMySymbol] = useState(null);
   const [myPlayerIndex, setMyPlayerIndex] = useState(-1);
-  const [, setIsPaused] = useState(false);
   const navigate = useNavigate();
 
   const [playMove] = useSound('/sounds/move.mp3', { volume: 0.5 });
   const [playWin] = useSound('/sounds/win.mp3', { volume: 0.7 });
 
-  useEffect(() => {
+  const handleCreateRoom = useCallback(() => {
     if (!socket) return;
-
-    setGamePrefix('uttt');
-
-    logger.info('UTTT', `Socket connected: ${socket.id}`);
-
-    const saved = sessionStorage.getItem('uttt_reconnect');
-    const hasSavedReconnect = saved && !roomId;
-    if (hasSavedReconnect) {
-      const { roomId: savedRoomId, playerId } = JSON.parse(saved);
-      logger.socket('➡️', 'uttt_reconnect', { roomId: savedRoomId, playerId });
-      socket.emit('uttt_reconnect', { roomId: savedRoomId, playerId });
-    }
-
-    // recovery: emit requestRoomInfo if roomId exists but we haven't received roomInfo yet
-    if (roomId && !hasSavedReconnect) {
-      socket.emit('uttt_requestRoomInfo', roomId);
-    }
-
-    socket.on('uttt_roomInfo', (room) => {
-      logger.socket('⬅️', 'uttt_roomInfo', {
-        roomId: room.id,
-        gameState: room.gameState,
-      });
-      setRoomId(room.id);
-      setPlayers(room.players);
-      setGameState(room.gameState);
-      setCurrentTurn(room.currentTurn);
-      if (room.board) setBoard(room.board);
-      if (room.macroBoard) setMacroBoard(room.macroBoard);
-      if (room.activeGrid !== undefined) setActiveGrid(room.activeGrid);
-      if (room.scores) setScores(room.scores);
-      if (room.lastMove) setLastMove(room.lastMove);
-
-      const playerIndex = room.players.findIndex((p) => p.id === socket.id);
-      if (playerIndex !== -1) {
-        setMySymbol(playerIndex === 0 ? 'X' : 'O');
-        setMyPlayerIndex(playerIndex);
-        sessionStorage.setItem(
-          'uttt_reconnect',
-          JSON.stringify({
-            roomId: room.id,
-            playerId: room.players[playerIndex].id,
-          }),
-        );
-      }
-    });
-
-    socket.on('uttt_gamePaused', ({ reason }) => {
-      logger.socket('⬅️', 'uttt_gamePaused', { reason });
-      setIsPaused(true);
-      Swal.fire({
-        title: 'Game Paused',
-        text: reason,
-        icon: 'warning',
-        customClass: { popup: sketchPopupClass },
-      });
-    });
-
-    socket.on('uttt_gameState', (room) => {
-      logger.socket('⬅️', 'uttt_gameState', {
-        gameState: room.gameState,
-        currentTurn: room.currentTurn,
-        activeGrid: room.activeGrid,
-        scores: room.scores,
-      });
-      setGameState(room.gameState);
-      setCurrentTurn(room.currentTurn);
-      setBoard(room.board);
-      setMacroBoard(room.macroBoard);
-      setActiveGrid(room.activeGrid);
-      setScores(room.scores);
-      setLastMove(room.lastMove);
-    });
-
-    socket.on('uttt_gameStarted', () => {
-      logger.socket('⬅️', 'uttt_gameStarted', 'Game started!');
-      setGameState('playing');
-      setBoard(
-        Array(9)
-          .fill(null)
-          .map(() => Array(9).fill(null)),
-      );
-      setMacroBoard(Array(9).fill(null));
-      setActiveGrid(null);
-      setScores({ X: 0, O: 0 });
-      setLastMove(null);
-      Swal.fire({
-        title: 'Game Started!',
-        html: '<div class="font-handwriting">Ultimate Tic-Tac-Toe begins!</div>',
-        timer: 1500,
-        showConfirmButton: false,
-        customClass: { popup: sketchPopupClass },
-      });
-    });
-
-    socket.on('uttt_gameOver', ({ winner, symbol, scores, reason }) => {
-      logger.socket('⬅️', 'uttt_gameOver', { winner, symbol, scores, reason });
-      playWin();
-
-      // Epic confetti for macro win
-      if (reason === 'macro_win') {
-        confetti({
-          particleCount: 150,
-          spread: 80,
-          origin: { y: 0.6 },
-          colors: ['#1a1a2e', '#c73e1d', '#2d4a8f'],
-        });
-        setTimeout(() => {
-          confetti({
-            particleCount: 100,
-            angle: 60,
-            spread: 55,
-            origin: { x: 0 },
-          });
-        }, 250);
-        setTimeout(() => {
-          confetti({
-            particleCount: 100,
-            angle: 120,
-            spread: 55,
-            origin: { x: 1 },
-          });
-        }, 400);
-      } else {
-        confetti({
-          particleCount: 100,
-          spread: 70,
-          origin: { y: 0.6 },
-        });
-      }
-
-      let winnerName;
-      if (reason === 'tiebreaker' && scores.X === scores.O) {
-        winnerName = "No one - it's a tie!";
-      } else if (winner) {
-        winnerName = players.find((p) => p.id === winner)?.name || 'Someone';
-      } else {
-        winnerName = symbol || 'Someone';
-      }
-
-      const reasonText =
-        reason === 'macro_win' ? ' achieved a Macro Victory!' : ` won by grids (${scores.X} - ${scores.O})!`;
-
-      Swal.fire({
-        title: '🏆 Victory! 🏆',
-        html: `<div class="font-handwriting text-lg">${winnerName}${reasonText}</div>`,
-        icon: 'success',
-        confirmButtonText: 'Awesome!',
-        customClass: { popup: sketchPopupClass },
-      });
-
-      setGameState('ended');
-      sessionStorage.removeItem('uttt_reconnect');
-    });
-
-    socket.on('uttt_error', ({ message }) => {
-      logger.socket('⬅️', 'uttt_error', { message });
-      Swal.fire({
-        title: 'Oops!',
-        text: message,
-        icon: 'error',
-        customClass: { popup: sketchPopupClass },
-      });
-    });
-
-    socket.on('uttt_playerLeft', ({ playerId }) => {
-      logger.socket('⬅️', 'uttt_playerLeft', { playerId });
-      Swal.fire({
-        title: 'Player Left',
-        text: 'Your opponent has left the game.',
-        icon: 'warning',
-        customClass: { popup: sketchPopupClass },
-      });
-      setGameState('waiting');
-      setBoard(
-        Array(9)
-          .fill(null)
-          .map(() => Array(9).fill(null)),
-      );
-      setMacroBoard(Array(9).fill(null));
-      setActiveGrid(null);
-    });
-
-    socket.on('uttt_alert', ({ icon, title, text }) => {
-      Swal.fire({
-        title,
-        text,
-        icon,
-        customClass: { popup: sketchPopupClass },
-      });
-    });
-
-    socket.on('server_shutdown', ({ message }) => {
-      Swal.fire({
-        title: 'Server Shutting Down',
-        text: message || 'The server is going down for maintenance.',
-        icon: 'info',
-        customClass: { popup: sketchPopupClass },
-      }).then(() => {
-        sessionStorage.removeItem('uttt_reconnect');
-        clearRoomId(roomId);
-        navigate('/');
-      });
-    });
-
-    return () => {
-      socket.off('uttt_roomInfo');
-      socket.off('uttt_gameStarted');
-      socket.off('uttt_gameOver');
-      socket.off('uttt_error');
-      socket.off('uttt_playerLeft');
-      socket.off('uttt_gamePaused');
-      socket.off('uttt_alert');
-      socket.off('server_shutdown');
-    };
-  }, [socket, setRoomId, playWin, roomId, players, navigate]);
-
-  const handleCellClick = (gridIndex, squareIndex) => {
-    if (gameState === 'playing' && currentTurn === socket?.id) {
-      if (activeGrid !== null && activeGrid !== gridIndex) return;
-      if (board[gridIndex][squareIndex] !== null) return;
-
-      playMove();
-      logger.socket('➡️', 'uttt_makeMove', { roomId, gridIndex, squareIndex });
-      socket.emit('uttt_makeMove', { roomId, gridIndex, squareIndex });
-    }
-  };
-
-  const handleCreateRoom = () => {
     logger.socket('➡️', 'uttt_createRoom', { playerName: profile.name });
     socket.emit('uttt_createRoom', {
       playerName: profile.name,
       avatarIcon: profile.avatarIcon,
       color: profile.color,
     });
-  };
+  }, [socket, profile]);
 
-  const handleJoinRoom = async () => {
+  const handleJoinRoom = useCallback(async () => {
     const { value: joinRoomId } = await Swal.fire({
       title: 'Join UTTT Room',
       input: 'text',
@@ -289,43 +64,300 @@ const UTTTGame = () => {
       customClass: { popup: sketchPopupClass },
     });
     if (joinRoomId) {
-      logger.socket('➡️', 'uttt_joinRoom', {
-        roomId: joinRoomId.toUpperCase(),
-        playerName: profile.name || playerName,
-        avatarIcon: profile.avatarIcon,
-        color: profile.color,
-      });
+      logger.socket('➡️', 'uttt_joinRoom', { roomId: joinRoomId.toUpperCase() });
       socket.emit('uttt_joinRoom', {
         roomId: joinRoomId.toUpperCase(),
-        playerName: profile.name || playerName,
+        playerName: profile.name,
         avatarIcon: profile.avatarIcon,
         color: profile.color,
       });
     }
-  };
+  }, [socket, profile]);
 
-  const handleRestartGame = () => {
-    logger.socket('➡️', 'uttt_restartGame', { roomId });
-    socket.emit('uttt_restartGame', roomId);
-  };
+  const { clearReconnect } = useReconnection({
+    socket,
+    gamePrefix: 'uttt',
+    roomId,
+    onRestore: (room) => {
+      if (!room) return;
+      setRoomId(room.id);
+      setPlayers(room.players || []);
+      setGameState(room.gameState || 'waiting');
+      setCurrentTurn(room.currentTurn);
+      if (room.board) setBoard(room.board);
+      if (room.macroBoard) setMacroBoard(room.macroBoard);
+      if (room.activeGrid !== undefined) setActiveGrid(room.activeGrid);
+      if (room.scores) setScores(room.scores);
+      if (room.lastMove) setLastMove(room.lastMove);
+      const playerIndex = room.players.findIndex((p) => p.id === room.currentTurn);
+      if (playerIndex !== -1) {
+        setMySymbol(playerIndex === 0 ? 'X' : 'O');
+        setMyPlayerIndex(playerIndex);
+      }
+    },
+  });
 
-  const handleLeaveRoom = () => {
-    Swal.fire({
+  useSocketListeners(
+    socket,
+    {
+      uttt_roomInfo: (room) => {
+        logger.socket('⬅️', 'uttt_roomInfo', { roomId: room.id, gameState: room.gameState });
+        setRoomId(room.id);
+        setPlayers(room.players);
+        setSpectators(room.spectators || []);
+        setGameState(room.gameState);
+        setCurrentTurn(room.currentTurn);
+        if (room.board) setBoard(room.board);
+        if (room.macroBoard) setMacroBoard(room.macroBoard);
+        if (room.activeGrid !== undefined) setActiveGrid(room.activeGrid);
+        if (room.scores) setScores(room.scores);
+        if (room.lastMove) setLastMove(room.lastMove);
+
+        const playerIndex = room.players.findIndex((p) => p.id === socket.id);
+        if (playerIndex !== -1) {
+          setMySymbol(playerIndex === 0 ? 'X' : 'O');
+          setMyPlayerIndex(playerIndex);
+          sessionStorage.setItem(
+            'uttt_reconnect',
+            JSON.stringify({
+              roomId: room.id,
+              playerId: room.players[playerIndex].id,
+            }),
+          );
+        }
+      },
+      uttt_gamePaused: ({ reason }) => {
+        logger.socket('⬅️', 'uttt_gamePaused', { reason });
+        Swal.fire({
+          title: 'Game Paused',
+          text: reason,
+          icon: 'warning',
+          customClass: { popup: sketchPopupClass },
+        });
+      },
+      uttt_gameState: (room) => {
+        logger.socket('⬅️', 'uttt_gameState', { gameState: room.gameState });
+        setGameState(room.gameState);
+        setCurrentTurn(room.currentTurn);
+        setBoard(room.board);
+        setMacroBoard(room.macroBoard);
+        setActiveGrid(room.activeGrid);
+        setScores(room.scores);
+        setLastMove(room.lastMove);
+      },
+      uttt_gameStarted: () => {
+        logger.socket('⬅️', 'uttt_gameStarted', 'Game started!');
+        setGameState('playing');
+        setBoard(
+          Array(9)
+            .fill(null)
+            .map(() => Array(9).fill(null)),
+        );
+        setMacroBoard(Array(9).fill(null));
+        setActiveGrid(null);
+        setScores({ X: 0, O: 0 });
+        setLastMove(null);
+        Swal.fire({
+          title: 'Game Started!',
+          html: '<div class="font-handwriting">Ultimate Tic-Tac-Toe begins!</div>',
+          timer: 1500,
+          showConfirmButton: false,
+          customClass: { popup: sketchPopupClass },
+        });
+      },
+      uttt_gameOver: ({ winner, symbol, scores, reason }) => {
+        logger.socket('⬅️', 'uttt_gameOver', { winner, symbol, scores, reason });
+        playWin();
+
+        if (reason === 'macro_win') {
+          confetti({
+            particleCount: 150,
+            spread: 80,
+            origin: { y: 0.6 },
+            colors: ['#1a1a2e', '#c73e1d', '#2d4a8f'],
+          });
+          setTimeout(() => {
+            confetti({
+              particleCount: 100,
+              angle: 60,
+              spread: 55,
+              origin: { x: 0 },
+            });
+          }, 250);
+          setTimeout(() => {
+            confetti({
+              particleCount: 100,
+              angle: 120,
+              spread: 55,
+              origin: { x: 1 },
+            });
+          }, 400);
+        } else {
+          confetti({
+            particleCount: 100,
+            spread: 70,
+            origin: { y: 0.6 },
+          });
+        }
+
+        let winnerName;
+        if (reason === 'tiebreaker' && scores.X === scores.O) {
+          winnerName = "No one - it's a tie!";
+        } else if (winner) {
+          winnerName = players.find((p) => p.id === winner)?.name || 'Someone';
+        } else {
+          winnerName = symbol || 'Someone';
+        }
+
+        const reasonText =
+          reason === 'macro_win' ? ' achieved a Macro Victory!' : ` won by grids (${scores.X} - ${scores.O})!`;
+        Swal.fire({
+          title: '🏆 Victory! 🏆',
+          html: `<div class="font-handwriting text-lg">${winnerName}${reasonText}</div>`,
+          icon: 'success',
+          confirmButtonText: 'Awesome!',
+          customClass: { popup: sketchPopupClass },
+        });
+
+        setGameState('ended');
+        clearReconnect();
+      },
+      uttt_error: ({ message }) => {
+        logger.socket('⬅️', 'uttt_error', { message });
+        Swal.fire({
+          title: 'Oops!',
+          text: message,
+          icon: 'error',
+          customClass: { popup: sketchPopupClass },
+        });
+      },
+      uttt_playerLeft: ({ playerId }) => {
+        logger.socket('⬅️', 'uttt_playerLeft', { playerId });
+        Swal.fire({
+          title: 'Player Left',
+          text: 'Your opponent has left the game.',
+          icon: 'warning',
+          customClass: { popup: sketchPopupClass },
+        });
+        setGameState('waiting');
+        setBoard(
+          Array(9)
+            .fill(null)
+            .map(() => Array(9).fill(null)),
+        );
+        setMacroBoard(Array(9).fill(null));
+        setActiveGrid(null);
+      },
+      uttt_alert: ({ icon, title, text }) => {
+        Swal.fire({
+          title,
+          text,
+          icon,
+          customClass: { popup: sketchPopupClass },
+        });
+      },
+      server_shutdown: ({ message }) => {
+        Swal.fire({
+          title: 'Server Shutting Down',
+          text: message || 'The server is going down for maintenance.',
+          icon: 'info',
+          customClass: { popup: sketchPopupClass },
+        }).then(() => {
+          clearReconnect();
+          clearRoomId(roomId);
+          navigate('/');
+        });
+      },
+    },
+    [clearRoomId, clearReconnect, navigate, playWin, players, roomId, setRoomId],
+  );
+
+  const handleCellClick = useCallback(
+    (gridIndex, squareIndex) => {
+      if (gameState === 'playing' && currentTurn === socket?.id) {
+        if (activeGrid !== null && activeGrid !== gridIndex) return;
+        if (board[gridIndex][squareIndex] !== null) return;
+
+        playMove();
+        logger.socket('➡️', 'uttt_makeMove', { roomId, gridIndex, squareIndex });
+        socket.emit('uttt_makeMove', { roomId, gridIndex, squareIndex });
+      }
+    },
+    [gameState, currentTurn, socket, activeGrid, board, playMove, roomId],
+  );
+
+  const handleStartGame = useCallback(() => {
+    if (!socket || !roomId) return;
+    logger.socket('➡️', 'uttt_startGame', { roomId });
+    socket.emit('uttt_startGame', roomId);
+  }, [socket, roomId]);
+
+  const handleLeaveRoom = useCallback(async () => {
+    const result = await Swal.fire({
       title: 'Leave Game?',
       text: 'Are you sure you want to leave?',
       icon: 'warning',
       showCancelButton: true,
       confirmButtonText: 'Yes, leave',
       customClass: { popup: sketchPopupClass },
-    }).then((result) => {
-      if (result.isConfirmed) {
-        socket.emit('uttt_leaveRoom', roomId);
-        sessionStorage.removeItem('uttt_reconnect');
-        clearRoomId(roomId);
-        navigate('/');
-      }
     });
-  };
+    if (result.isConfirmed) {
+      socket.emit('uttt_leaveRoom', roomId);
+      clearReconnect();
+      clearRoomId(roomId);
+      navigate('/');
+    }
+  }, [roomId, socket, clearReconnect, clearRoomId, navigate]);
+
+  const handleRestartGame = useCallback(() => {
+    logger.socket('➡️', 'uttt_restartGame', { roomId });
+    socket.emit('uttt_restartGame', roomId);
+  }, [roomId, socket]);
+
+  useEffect(() => {
+    if (!socket) return;
+    setGamePrefix('uttt');
+    logger.info('UTTT', `Socket connected: ${socket.id}`);
+  }, [socket, setGamePrefix]);
+
+  const isSpectator = spectators?.some((s) => s.id === socket?.id);
+  const isHost = players[0]?.id === socket?.id;
+
+  if (gameState === 'ended') {
+    const scoresList = [
+      { name: players[0]?.name || 'Player 1', score: scores.X || 0 },
+      { name: players[1]?.name || 'Player 2', score: scores.O || 0 },
+    ];
+    return (
+      <MatchReport
+        winner={null}
+        isWinner={false}
+        scores={scoresList}
+        players={players}
+        onRematch={handleRestartGame}
+        onNewRoom={handleLeaveRoom}
+      />
+    );
+  }
+
+  if (roomId && gameState === 'waiting') {
+    return (
+      <GameLobby
+        gameName="Ultimate Tic-Tac-Toe"
+        roomId={roomId}
+        players={players}
+        spectators={spectators || []}
+        isHost={!!isHost}
+        minPlayers={2}
+        onStart={handleStartGame}
+        onLeave={handleLeaveRoom}
+        showJoinInput
+        startLabel="Start Game"
+        profile={profile}
+        onProfileChange={(next) => setProfile(next)}
+      />
+    );
+  }
 
   return (
     <GameLayout players={players}>

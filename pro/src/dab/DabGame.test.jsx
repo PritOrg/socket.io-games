@@ -3,6 +3,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import DabGame from './DabGame';
 import { GameProvider } from '../context/GameContext';
+import { ThemeProvider } from '../context/ThemeContext';
 import { BrowserRouter } from 'react-router-dom';
 
 const mockSocket = {
@@ -23,9 +24,11 @@ vi.mock('react-zoom-pan-pinch', () => ({
 }));
 
 const Wrapper = ({ children }) => (
-  <GameProvider>
-    <BrowserRouter>{children}</BrowserRouter>
-  </GameProvider>
+  <ThemeProvider>
+    <GameProvider>
+      <BrowserRouter>{children}</BrowserRouter>
+    </GameProvider>
+  </ThemeProvider>
 );
 
 const findEventCb = (event) => {
@@ -66,38 +69,38 @@ describe('DabGame', () => {
   });
 
   describe('Lobby - No Room', () => {
-    it('shows Create Room and Join Room buttons', () => {
+    it('shows Start Game and Join Room buttons', () => {
       render(<DabGame />, { wrapper: Wrapper });
-      expect(screen.getByText('Create Room')).toBeTruthy();
+      expect(screen.getByText('Start Game')).toBeTruthy();
       expect(screen.getByText('Join Room')).toBeTruthy();
     });
 
-    it('emits dab_createRoom when Create Room is clicked', async () => {
+    it('emits dab_startGame when Start Game is clicked', async () => {
       render(<DabGame />, { wrapper: Wrapper });
       await act(async () => {
-        fireEvent.click(screen.getByText('Create Room'));
+        fireEvent.click(screen.getByText('Start Game'));
       });
-      expect(mockSocket.emit).toHaveBeenCalledWith('dab_createRoom', expect.objectContaining({ mode: 'classic' }));
+      expect(mockSocket.emit).toHaveBeenCalledWith('dab_startGame', expect.objectContaining({ rows: 9, cols: 9 }));
     });
   });
 
   describe('Mode Selection', () => {
     it('shows Classic, Extended, and Marathon mode buttons', () => {
       render(<DabGame />, { wrapper: Wrapper });
-      expect(screen.getByText('Classic (9×9)')).toBeTruthy();
-      expect(screen.getByText('Extended (14×14)')).toBeTruthy();
-      expect(screen.getByText('Marathon (19×19)')).toBeTruthy();
+      expect(screen.getByText('Classic')).toBeTruthy();
+      expect(screen.getByText('Extended')).toBeTruthy();
+      expect(screen.getByText('Marathon')).toBeTruthy();
     });
 
     it('switches mode when Extended is clicked', async () => {
       render(<DabGame />, { wrapper: Wrapper });
       await act(async () => {
-        fireEvent.click(screen.getByText('Extended (14×14)'));
+        fireEvent.click(screen.getByText('Extended'));
       });
       await act(async () => {
-        fireEvent.click(screen.getByText('Create Room'));
+        fireEvent.click(screen.getByText('Start Game'));
       });
-      expect(mockSocket.emit).toHaveBeenCalledWith('dab_createRoom', expect.objectContaining({ mode: 'extended' }));
+      expect(mockSocket.emit).toHaveBeenCalledWith('dab_startGame', expect.objectContaining({ rows: 14, cols: 14 }));
     });
   });
 
@@ -149,10 +152,10 @@ describe('DabGame', () => {
         gameOverCb({ winner: 'p1', scores: [5, 3], winners: ['p1'] });
       });
 
-      expect(screen.getByText(/Play Again/)).toBeTruthy();
+      expect(screen.getByText('Rematch')).toBeTruthy();
     });
 
-    it('emits dab_restartGame when Play Again is clicked', async () => {
+    it('emits dab_restartGame when Rematch is clicked', async () => {
       render(<DabGame />, { wrapper: Wrapper });
 
       const cb = findEventCb('dab_roomInfo');
@@ -165,9 +168,9 @@ describe('DabGame', () => {
         gameOverCb({ winner: 'p1', scores: [5, 3], winners: ['p1'] });
       });
 
-      const playAgainBtn = screen.getByText('Play Again');
+      const rematchBtn = screen.getByText('Rematch');
       await act(async () => {
-        fireEvent.click(playAgainBtn);
+        fireEvent.click(rematchBtn);
       });
 
       expect(mockSocket.emit).toHaveBeenCalledWith('dab_restartGame', expect.any(String));

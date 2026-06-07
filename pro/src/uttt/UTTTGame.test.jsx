@@ -3,6 +3,7 @@ import { render, screen, fireEvent, act, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import UTTTGame from './UTTTGame';
 import { GameProvider } from '../context/GameContext';
+import { ThemeProvider } from '../context/ThemeContext';
 import { BrowserRouter } from 'react-router-dom';
 
 const mockSocket = {
@@ -19,9 +20,11 @@ vi.mock('canvas-confetti', () => ({ default: vi.fn() }));
 vi.mock('sweetalert2', () => ({ default: { fire: vi.fn().mockResolvedValue({ isConfirmed: true }) } }));
 
 const Wrapper = ({ children }) => (
-  <GameProvider>
-    <BrowserRouter>{children}</BrowserRouter>
-  </GameProvider>
+  <ThemeProvider>
+    <GameProvider>
+      <BrowserRouter>{children}</BrowserRouter>
+    </GameProvider>
+  </ThemeProvider>
 );
 
 const makeBoard = () =>
@@ -235,10 +238,10 @@ describe('UTTTGame', () => {
         });
       });
 
-      expect(screen.getByText('Play Again')).toBeTruthy();
+      expect(screen.getByText('Rematch')).toBeTruthy();
     });
 
-    it('emits uttt_restartGame when Play Again is clicked', async () => {
+    it('emits uttt_restartGame when Rematch is clicked', async () => {
       render(<UTTTGame />, { wrapper: Wrapper });
 
       const cb = findEventCb('uttt_roomInfo');
@@ -256,9 +259,9 @@ describe('UTTTGame', () => {
         });
       });
 
-      const playAgainBtn = screen.getByText('Play Again');
+      const rematchBtn = screen.getByText('Rematch');
       await act(async () => {
-        fireEvent.click(playAgainBtn);
+        fireEvent.click(rematchBtn);
       });
 
       expect(mockSocket.emit).toHaveBeenCalledWith('uttt_restartGame', expect.any(String));

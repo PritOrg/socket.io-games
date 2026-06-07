@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-const useReconnection = ({ socket, gamePrefix, roomId, onRestore }) => {
+const useReconnection = ({ socket, gamePrefix, _roomId, onRestore }) => {
   const attemptedRef = useRef(false);
 
   useEffect(() => {

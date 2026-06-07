@@ -2,6 +2,8 @@ import React from 'react';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import GameLayout from './GameLayout';
+import { GameContext } from '../../context/GameContext';
+import { ThemeProvider } from '../../context/ThemeContext';
 import { BrowserRouter } from 'react-router-dom';
 
 vi.mock('sweetalert2', () => ({
@@ -10,21 +12,41 @@ vi.mock('sweetalert2', () => ({
   },
 }));
 
-const mockSocket = { emit: vi.fn(), disconnect: vi.fn() };
+const mockSocket = { emit: vi.fn(), on: vi.fn(), off: vi.fn(), disconnect: vi.fn() };
 const mockNavigate = vi.fn();
+const mockClearRoomId = vi.fn();
 
 vi.mock('react-router-dom', async (importOriginal) => {
   const actual = await importOriginal();
   return { ...actual, useNavigate: () => mockNavigate };
 });
 
-const renderLayout = (props = {}) =>
+const baseContextValue = {
+  socket: mockSocket,
+  roomId: 'ABC123',
+  gamePrefix: 'ttt',
+  clearRoomId: mockClearRoomId,
+  setRoomId: vi.fn(),
+  setGamePrefix: vi.fn(),
+  leaveRoom: vi.fn(),
+  clearReconnect: vi.fn(),
+  playerName: 'Test',
+  profile: { name: 'Test', avatarIcon: 'cat', color: '#2a2a3e' },
+  setPlayerName: vi.fn(),
+  setProfile: vi.fn(),
+};
+
+const renderLayout = (overrides = {}) =>
   render(
-    <BrowserRouter>
-      <GameLayout socket={mockSocket} roomId="ABC123" gamePrefix="ttt" {...props}>
-        <div data-testid="game-content">Board</div>
-      </GameLayout>
-    </BrowserRouter>,
+    <ThemeProvider>
+      <BrowserRouter>
+        <GameContext.Provider value={{ ...baseContextValue, ...overrides }}>
+          <GameLayout>
+            <div data-testid="game-content">Board</div>
+          </GameLayout>
+        </GameContext.Provider>
+      </BrowserRouter>
+    </ThemeProvider>,
   );
 
 describe('GameLayout', () => {
@@ -41,12 +63,23 @@ describe('GameLayout', () => {
   });
 
   it('renders player avatars when players prop is provided', () => {
-    renderLayout({
-      players: [
-        { id: 'p1', name: 'Alice' },
-        { id: 'p2', name: 'Bob' },
-      ],
-    });
+    renderLayout();
+    const { rerender } = render(
+      <ThemeProvider>
+        <BrowserRouter>
+          <GameContext.Provider value={{ ...baseContextValue }}>
+            <GameLayout
+              players={[
+                { id: 'p1', name: 'Alice' },
+                { id: 'p2', name: 'Bob' },
+              ]}
+            >
+              <div data-testid="game-content">Board</div>
+            </GameLayout>
+          </GameContext.Provider>
+        </BrowserRouter>
+      </ThemeProvider>,
+    );
     expect(screen.getByText('Al')).toBeInTheDocument();
     expect(screen.getByText('Bo')).toBeInTheDocument();
   });
@@ -63,7 +96,8 @@ describe('GameLayout', () => {
     renderLayout();
     const backBtn = screen.getByRole('button', { name: /back|leave/i });
     await act(async () => fireEvent.click(backBtn));
-    expect(mockSocket.disconnect).toHaveBeenCalled();
+    expect(mockSocket.emit).toHaveBeenCalledWith('ttt_leaveRoom', 'ABC123');
+    expect(mockClearRoomId).toHaveBeenCalled();
     expect(mockNavigate).toHaveBeenCalledWith('/');
   });
 
