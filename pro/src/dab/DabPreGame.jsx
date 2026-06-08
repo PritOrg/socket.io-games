@@ -39,15 +39,15 @@ const DabPreGame = ({
         <input
           type="text"
           value={profile.name}
-          onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+          onChange={(e) => setProfile((prev) => ({ ...prev, name: e.target.value }))}
           placeholder="Enter your name"
           className="w-full sketch-border font-handwriting text-ink px-3 py-2 rounded mb-4"
         />
         <AvatarSelector
           avatarIcon={profile.avatarIcon}
           color={profile.color}
-          onAvatarChange={(icon) => setProfile({ ...profile, avatarIcon: icon })}
-          onColorChange={(color) => setProfile({ ...profile, color })}
+          onAvatarChange={(icon) => setProfile((prev) => ({ ...prev, avatarIcon: icon }))}
+          onColorChange={(color) => setProfile((prev) => ({ ...prev, color }))}
         />
       </SketchCard>
 

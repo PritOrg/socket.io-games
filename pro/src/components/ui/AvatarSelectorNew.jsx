@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight, RotateCw } from 'lucide-react';
-import { useAvatarStore, AVATAR_STYLES, AVATAR_COLORS } from '../store/avatarStore';
+import { useAvatarStore, AVATAR_STYLES, AVATAR_COLORS } from '../../store/avatarStore';
 
 export default function AvatarSelector() {
   const { avatar, setAvatar, generateNewAvatar, getAvatarUrl } = useAvatarStore();

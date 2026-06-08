@@ -105,6 +105,25 @@ const SOSGame = () => {
       sos_alert: ({ icon, title, text }) => {
         Swal.fire({ icon, title, text });
       },
+      sos_reconnectFailed: ({ reason, roomId: failedRoomId }) => {
+        Swal.fire({
+          title: 'Reconnection Failed',
+          text:
+            reason === 'room_not_found'
+              ? 'The room no longer exists.'
+              : reason === 'player_not_found'
+                ? 'Your player session was not found.'
+                : reason === 'game_already_ended'
+                  ? 'The game has ended.'
+                  : 'Could not reconnect to the game.',
+          icon: 'error',
+          customClass: { popup: sketchPopupClass },
+        }).then(() => {
+          clearReconnect();
+          clearRoomId();
+          navigate('/');
+        });
+      },
       server_shutdown: ({ message }) => {
         Swal.fire({
           title: 'Server Shutting Down',
@@ -267,7 +286,7 @@ const SOSGame = () => {
           <input
             type="text"
             value={profile.name}
-            onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+            onChange={(e) => setProfile((prev) => ({ ...prev, name: e.target.value }))}
             placeholder="Enter name"
             className="sketch-input w-full mt-1"
             maxLength={20}
@@ -292,8 +311,8 @@ const SOSGame = () => {
         <AvatarSelector
           avatarIcon={profile.avatarIcon}
           color={profile.color}
-          onAvatarChange={(icon) => setProfile({ ...profile, avatarIcon: icon })}
-          onColorChange={(c) => setProfile({ ...profile, color: c })}
+          onAvatarChange={(icon) => setProfile((prev) => ({ ...prev, avatarIcon: icon }))}
+          onColorChange={(c) => setProfile((prev) => ({ ...prev, color: c }))}
         />
 
         <SketchButton onClick={handleCreateRoom} className="w-full">

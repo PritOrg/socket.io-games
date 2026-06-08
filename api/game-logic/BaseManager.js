@@ -1,4 +1,5 @@
 const { v4: uuidv4 } = require('uuid');
+const logger = require('../utils/logger');
 
 class BaseManager {
   constructor(io) {
@@ -6,6 +7,90 @@ class BaseManager {
     this.rooms = new Map();
     this.timers = new Map();
     this.socketRooms = new Map();
+  }
+
+  onSocketError(socket, error, context) {
+    const prefix = this.gamePrefix ? this.gamePrefix.toUpperCase() : 'SERVER';
+    logger.error(prefix, `Error in ${context}`, {
+      socketId: socket?.id,
+      message: error?.message || String(error),
+    });
+  }
+
+  validateReconnectPayload(data, socket) {
+    if (!data || typeof data !== 'object') {
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Invalid Reconnection',
+        text: 'Reconnection data missing or malformed',
+      });
+      return null;
+    }
+    if (!data.roomId || typeof data.roomId !== 'string') {
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Invalid Reconnection',
+        text: 'Room ID is required',
+      });
+      return null;
+    }
+    if (!data.playerId || typeof data.playerId !== 'string') {
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Invalid Reconnection',
+        text: 'Player ID is required',
+      });
+      return null;
+    }
+    return {
+      roomId: this.sanitizeRoomId(data.roomId),
+      playerId: data.playerId,
+    };
+  }
+
+  handleReconnection(socket, roomId, playerId, roomCallbacks, gamePrefix) {
+    const room = this.rooms.get(roomId);
+    if (!room) {
+      if (roomCallbacks?.onNotFound) roomCallbacks.onNotFound(socket, gamePrefix);
+      return false;
+    }
+
+    const player = room.players.find((p) => p.id === playerId);
+    if (!player) {
+      if (roomCallbacks?.onPlayerNotFound) roomCallbacks.onPlayerNotFound(socket, gamePrefix);
+      return false;
+    }
+
+    return true;
+  }
+
+  handleReconnectFailure(socket, reason, roomId, gamePrefix) {
+    socket.emit(`${gamePrefix}_reconnectFailed`, { reason, roomId });
+    this.clearTimer(`empty_${roomId}`);
+    this.clearAllTimersForRoom(roomId);
+  }
+
+  onSocketEvent(socket, eventName, handler) {
+    socket.on(eventName, (...args) => {
+      Promise.resolve()
+        .then(() => handler(...args))
+        .catch((error) => {
+          const prefix = this.gamePrefix ? this.gamePrefix.toUpperCase() : 'SERVER';
+          logger.error(prefix, `Unhandled error while processing ${eventName}`, {
+            socketId: socket?.id,
+            message: error?.message || String(error),
+            stack: error?.stack,
+          });
+
+          if (this.gamePrefix) {
+            socket.emit(`${this.gamePrefix}_alert`, {
+              icon: 'error',
+              title: 'Server Error',
+              text: 'Something went wrong. Please try again.',
+            });
+          }
+        });
+    });
   }
 
   generateRoomId() {
@@ -73,46 +158,6 @@ class BaseManager {
 
     player.connected = false;
     if (callbacks?.onPlayerLeft) callbacks.onPlayerLeft(room, socket, player);
-  }
-
-  handleReconnection(socket, roomId, playerId, roomCallbacks, gamePrefix) {
-    const room = this.rooms.get(roomId);
-    if (!room) {
-      if (roomCallbacks?.onNotFound) roomCallbacks.onNotFound(socket, gamePrefix);
-      return;
-    }
-
-    const player = room.players.find((p) => p.id === playerId);
-    if (!player) {
-      if (roomCallbacks?.onPlayerNotFound) roomCallbacks.onPlayerNotFound(socket, gamePrefix);
-      return;
-    }
-
-    socket.join(room.id);
-    player.id = socket.id;
-    player.connected = true;
-
-    if (roomCallbacks?.onReconnect) roomCallbacks.onReconnect(socket, room, player);
-
-    this.clearTimer(`empty_${roomId}`);
-
-    if (room.gameState === 'paused' && roomCallbacks?.onResume) {
-      const activeCount = room.players.filter((p) => p.connected).length;
-      if (activeCount >= 2) {
-        room.gameState = 'playing';
-        if (room.forfeitTimer) {
-          clearTimeout(room.forfeitTimer);
-          room.forfeitTimer = null;
-        }
-        this.io.to(room.id).emit(`${gamePrefix}_alert`, {
-          icon: 'success',
-          title: 'Player Reconnected',
-          text: 'Game resumed!',
-        });
-      }
-    }
-
-    if (roomCallbacks?.onUpdateRoom) roomCallbacks.onUpdateRoom(room, roomId);
   }
 
   clearAllTimersForRoom(roomId) {

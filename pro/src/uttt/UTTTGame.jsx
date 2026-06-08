@@ -38,7 +38,7 @@ const UTTTGame = () => {
   const [activeGrid, setActiveGrid] = useState(null);
   const [scores, setScores] = useState({ X: 0, O: 0 });
   const [lastMove, setLastMove] = useState(null);
-  const [, setMySymbol] = useState(null);
+  const setMySymbol = useState(null)[1];
   const [myPlayerIndex, setMyPlayerIndex] = useState(-1);
   const navigate = useNavigate();
 
@@ -256,6 +256,25 @@ const UTTTGame = () => {
           customClass: { popup: sketchPopupClass },
         });
       },
+      uttt_reconnectFailed: ({ reason, roomId: failedRoomId }) => {
+        Swal.fire({
+          title: 'Reconnection Failed',
+          text:
+            reason === 'room_not_found'
+              ? 'The room no longer exists.'
+              : reason === 'player_not_found'
+                ? 'Your player session was not found.'
+                : reason === 'game_already_ended'
+                  ? 'The game has ended.'
+                  : 'Could not reconnect to the game.',
+          icon: 'error',
+          customClass: { popup: sketchPopupClass },
+        }).then(() => {
+          clearReconnect();
+          clearRoomId(failedRoomId);
+          navigate('/');
+        });
+      },
       server_shutdown: ({ message }) => {
         Swal.fire({
           title: 'Server Shutting Down',
@@ -385,15 +404,15 @@ const UTTTGame = () => {
             <input
               type="text"
               value={profile.name}
-              onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+              onChange={(e) => setProfile((prev) => ({ ...prev, name: e.target.value }))}
               placeholder="Enter your name"
               className="w-full sketch-border font-handwriting text-ink px-3 py-2 rounded mb-4"
             />
             <AvatarSelector
               avatarIcon={profile.avatarIcon}
               color={profile.color}
-              onAvatarChange={(icon) => setProfile({ ...profile, avatarIcon: icon })}
-              onColorChange={(c) => setProfile({ ...profile, color: c })}
+              onAvatarChange={(icon) => setProfile((prev) => ({ ...prev, avatarIcon: icon }))}
+              onColorChange={(c) => setProfile((prev) => ({ ...prev, color: c }))}
             />
 
             <div className="flex gap-3 sm:gap-4 flex-col sm:flex-row mt-4">

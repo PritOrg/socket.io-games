@@ -92,7 +92,7 @@ describe('TicTacToe', () => {
       expect(screen.getByText('Bo')).toBeTruthy();
     });
 
-    it('shows Play Again button when game ends with win', async () => {
+    it('shows Rematch button when game ends with win', async () => {
       render(<TicTacToe />, { wrapper: Wrapper });
 
       const cb = findEventCb('ttt_roomInfo');
@@ -105,10 +105,10 @@ describe('TicTacToe', () => {
         gameWonCb({ winner: 'p1', winningLine: [0, 1, 2] });
       });
 
-      expect(screen.getByText('Play Again')).toBeTruthy();
+      expect(screen.getByText('Rematch')).toBeTruthy();
     });
 
-    it('shows Play Again button when game ends with draw', async () => {
+    it('shows Rematch button when game ends with draw', async () => {
       render(<TicTacToe />, { wrapper: Wrapper });
 
       const cb = findEventCb('ttt_roomInfo');
@@ -121,7 +121,7 @@ describe('TicTacToe', () => {
         gameDrawCb();
       });
 
-      expect(screen.getByText('Play Again')).toBeTruthy();
+      expect(screen.getByText('Rematch')).toBeTruthy();
     });
   });
 

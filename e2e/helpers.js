@@ -34,17 +34,24 @@ async function clickCreateRoom(page, buttonText = 'Create Room') {
 }
 
 async function getRoomCode(page) {
-  const roomBtn = page.locator('button[title="Click to copy room ID"]');
-  await roomBtn.waitFor({ state: 'visible', timeout: 10000 });
-  // Poll for non-empty text content
+  const trySelectors = ['p.text-3xl.font-sketch.text-ink.tracking-widest', 'span.font-bold.uppercase'];
+  for (const sel of trySelectors) {
+    const el = page.locator(sel).first();
+    if (await el.isVisible().catch(() => false)) {
+      const text = await el.textContent();
+      if (text && text.trim().length > 0) return text.trim();
+    }
+  }
+  // Wait for any known selector
+  const anySel = trySelectors.join(', ');
+  const el = page.locator(anySel).first();
+  await el.waitFor({ state: 'visible', timeout: 10000 });
   for (let i = 0; i < 30; i++) {
-    const text = await roomBtn.textContent();
+    const text = await el.textContent();
     if (text && text.trim().length > 0) return text.trim();
     await page.waitForTimeout(500);
   }
-  // Fallback
-  const text = await roomBtn.textContent();
-  return text.trim();
+  return (await el.textContent()).trim();
 }
 
 async function clickJoinRoom(page, buttonText = 'Join Room') {
@@ -118,6 +125,12 @@ async function clickNthCell(page, gridSelector, n) {
   await cells.nth(n).click();
 }
 
+async function directJoinRoom(page, roomCode) {
+  await page.locator('input[placeholder="Room Code"]').waitFor({ state: 'visible', timeout: 5000 });
+  await page.locator('input[placeholder="Room Code"]').fill(roomCode);
+  await page.locator('button:has-text("Join as Player")').click();
+}
+
 module.exports = {
   SwalSelectors,
   setPlayerName,
@@ -132,4 +145,5 @@ module.exports = {
   waitForGameStart,
   createAndJoinRoom,
   clickNthCell,
+  directJoinRoom,
 };

@@ -13,7 +13,7 @@ export default function NotificationProvider() {
       closeButton
       expand
       toastOptions={{
-        classNamefont: 'sketch-card font-handwriting',
+        className: 'sketch-card font-handwriting',
         style: {
           background: theme === 'dark' ? '#1e1e1e' : '#fffef9',
           color: theme === 'dark' ? '#e0e0e0' : '#2a2a3e',

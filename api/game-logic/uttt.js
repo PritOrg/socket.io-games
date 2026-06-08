@@ -8,48 +8,53 @@ class UTTTManager extends BaseManager {
   }
 
   handleConnection(socket) {
-    socket.on(`${this.gamePrefix}_createRoom`, (data) => {
+    this.onSocketEvent(socket, `${this.gamePrefix}_createRoom`, (data) => {
       logger.socket('IN', `${this.gamePrefix}_createRoom`, socket.id, data);
       this.createRoom(socket, data);
     });
 
-    socket.on(`${this.gamePrefix}_joinRoom`, (data) => {
+    this.onSocketEvent(socket, `${this.gamePrefix}_joinRoom`, (data) => {
       logger.socket('IN', `${this.gamePrefix}_joinRoom`, socket.id, data);
       this.joinRoom(socket, data);
     });
 
-    socket.on(`${this.gamePrefix}_makeMove`, (data) => {
+    this.onSocketEvent(socket, `${this.gamePrefix}_makeMove`, (data) => {
       logger.socket('IN', `${this.gamePrefix}_makeMove`, socket.id, data);
       this.makeMove(socket, data);
     });
 
-    socket.on(`${this.gamePrefix}_restartGame`, (roomId) => {
+    this.onSocketEvent(socket, `${this.gamePrefix}_restartGame`, (roomId) => {
       logger.socket('IN', `${this.gamePrefix}_restartGame`, socket.id, { roomId });
       this.restartGame(socket, roomId);
     });
 
-    socket.on(`${this.gamePrefix}_leaveRoom`, (roomId) => {
+    this.onSocketEvent(socket, `${this.gamePrefix}_leaveRoom`, (roomId) => {
       logger.socket('IN', `${this.gamePrefix}_leaveRoom`, socket.id, { roomId });
       this.leaveRoom(socket, roomId);
     });
 
-    socket.on(`${this.gamePrefix}_reconnect`, (data) => {
+    this.onSocketEvent(socket, `${this.gamePrefix}_reconnect`, (data) => {
       logger.socket('IN', `${this.gamePrefix}_reconnect`, socket.id, data);
       this.reconnect(socket, data);
     });
 
-    socket.on(`${this.gamePrefix}_requestRoomInfo`, (roomId) => {
+    this.onSocketEvent(socket, `${this.gamePrefix}_requestRoomInfo`, (roomId) => {
       const sanitized = this.sanitizeRoomId(roomId);
       if (sanitized) this.sendRoomInfo(sanitized);
     });
 
-    socket.on('disconnect', () => {
+    this.onSocketEvent(socket, 'disconnect', () => {
       logger.warn('UTTT', `Socket disconnected: ${socket.id}`);
       this.handleDisconnect(socket);
     });
 
-    socket.on('server_shutdown', () => {
-      this.clearAllTimersForRoom(socket.id);
+    this.onSocketEvent(socket, 'server_shutdown', () => {
+      const rooms = this.socketRooms.get(socket.id);
+      if (rooms) {
+        for (const roomId of rooms) {
+          this.clearAllTimersForRoom(roomId);
+        }
+      }
     });
   }
 
@@ -69,7 +74,7 @@ class UTTTManager extends BaseManager {
         return { winner: board[a], line: [a, b, c] };
       }
     }
-    return { winner: null };
+    return null;
   }
 
   checkMacroWin(macroBoard) {
@@ -166,9 +171,7 @@ class UTTTManager extends BaseManager {
     room.gameState = 'playing';
     room.currentTurn = room.players[0].id;
 
-    if (room.emptyTimer) {
-      this.clearTimer(`empty_${roomId}`);
-    }
+    this.clearTimer(`empty_${roomIdSanitized}`);
 
     logger.success('UTTT', `Player ${playerName} (${socket.id}) joined room ${roomId}`);
     this.io.to(room.id).emit(`${this.gamePrefix}_gameStarted`);
@@ -267,9 +270,10 @@ class UTTTManager extends BaseManager {
     logger.info('UTTT', `Move: ${player?.name} (${symbol}) played [${gridIndex},${squareIndex}] in ${roomId}`);
 
     const innerResult = this.checkInnerWin(room.board[gridIndex]);
-    if (innerResult.winner && !['X', 'O', 'DEAD'].includes(room.macroBoard[gridIndex])) {
+    const innerWinner = innerResult?.winner;
+    if (innerWinner && !['X', 'O', 'DEAD'].includes(room.macroBoard[gridIndex])) {
       const prevWon = room.wonGrids.includes(gridIndex);
-      room.macroBoard[gridIndex] = innerResult.winner;
+      room.macroBoard[gridIndex] = innerWinner;
       room.wonGrids = room.wonGrids.filter((g) => g !== gridIndex);
       room.wonGrids.push(gridIndex);
       room.scores[innerResult.winner]++;
@@ -298,6 +302,26 @@ class UTTTManager extends BaseManager {
         scores: room.scores,
         reason: 'macro_win',
         winningLine: macroResult.line,
+      });
+      this.sendRoomInfo(room.id);
+      return;
+    }
+
+    const allMacroClaimed = room.macroBoard.every((cell) => cell !== null);
+    if (allMacroClaimed) {
+      room.gameState = 'ended';
+      const winnerSymbol = room.scores.X > room.scores.O ? 'X' : room.scores.O > room.scores.X ? 'O' : 'TIE';
+      const winnerPlayer =
+        winnerSymbol === 'TIE' ? null : room.players.find((p) => room.symbols[p.id] === winnerSymbol);
+      logger.success(
+        'UTTT',
+        `GAME OVER! All macro cells claimed - ${winnerSymbol} wins (${room.scores.X}-${room.scores.O}) in ${roomId}`,
+      );
+      this.io.to(room.id).emit(`${this.gamePrefix}_gameOver`, {
+        winner: winnerPlayer?.id || null,
+        symbol: winnerSymbol,
+        scores: room.scores,
+        reason: 'tiebreaker',
       });
       this.sendRoomInfo(room.id);
       return;
@@ -401,8 +425,8 @@ class UTTTManager extends BaseManager {
       const activeCount = room.players.filter((p) => p.connected).length;
 
       if (activeCount === 0) {
-        this.registerEmptyTimer(roomId, () => {
-          this.rooms.delete(roomId);
+        this.registerEmptyTimer(roomIdSanitized, () => {
+          this.rooms.delete(roomIdSanitized);
         });
       } else if (activeCount === 1) {
         room.gameState = 'paused';
@@ -422,40 +446,74 @@ class UTTTManager extends BaseManager {
   }
 
   reconnect(socket, { roomId, playerId }) {
-    const roomIdSanitized = this.sanitizeRoomId(roomId);
+    const validation = this.validateReconnectPayload({ roomId, playerId }, socket);
+    if (!validation) return false;
+
+    const roomIdSanitized = validation.roomId;
     const room = this.rooms.get(roomIdSanitized);
+
     if (!room) {
+      logger.error('UTTT', `Reconnect failed: Room ${roomId} not found`);
       socket.emit(`${this.gamePrefix}_alert`, {
         icon: 'error',
-        title: 'Error',
-        text: 'Room not found',
+        title: 'Room Not Found',
+        text: 'The room you were trying to reconnect to no longer exists.',
       });
-      return;
+      socket.emit(`${this.gamePrefix}_reconnectFailed`, {
+        reason: 'room_not_found',
+        roomId: roomIdSanitized,
+      });
+      return false;
     }
 
-    const player = room.players.find((p) => p.id === playerId);
+    const player = room.players.find((p) => p.id === validation.playerId);
     if (!player) {
+      logger.error('UTTT', `Reconnect failed: Player ${playerId} not found in room`);
       socket.emit(`${this.gamePrefix}_alert`, {
         icon: 'error',
-        title: 'Error',
-        text: 'Player not found',
+        title: 'Player Not Found',
+        text: 'Your player session was not found in the room.',
       });
-      return;
+      socket.emit(`${this.gamePrefix}_reconnectFailed`, {
+        reason: 'player_not_found',
+        roomId: roomIdSanitized,
+      });
+      return false;
+    }
+
+    if (room.gameState === 'ended') {
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'info',
+        title: 'Game Ended',
+        text: 'Cannot reconnect to an ended game.',
+      });
+      socket.emit(`${this.gamePrefix}_reconnectFailed`, {
+        reason: 'game_already_ended',
+        roomId: roomIdSanitized,
+      });
+      return false;
     }
 
     socket.join(room.id);
+    const oldId = player.id;
     player.id = socket.id;
     player.connected = true;
     this._trackSocket(socket.id, room.id);
 
-    this.clearTimer(`empty_${roomId}`);
+    // Re-key per-player symbols to new socket ID
+    if (room.symbols[oldId]) {
+      room.symbols[socket.id] = room.symbols[oldId];
+      delete room.symbols[oldId];
+    }
+
+    this.clearTimer(`empty_${roomIdSanitized}`);
 
     if (room.gameState === 'paused') {
       const activeCount = room.players.filter((p) => p.connected).length;
       if (activeCount >= 2) {
         room.gameState = 'playing';
-        // Note: forfeit_${roomId} timer is never registered in this manager; clearTimer is a no-op pending forfeit feature
-        this.clearTimer(`forfeit_${roomId}`);
+        this.clearTimer(`forfeit_${roomIdSanitized}`);
+        logger.info('UTTT', `Player ${player.name} reconnected to room ${roomId}`);
         this.io.to(room.id).emit(`${this.gamePrefix}_alert`, {
           icon: 'success',
           title: 'Player Reconnected',

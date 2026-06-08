@@ -123,8 +123,30 @@ app.post('/cleanup', (req, res) => {
   res.json({ cleaned });
 });
 
-function shutdown() {
-  logger.warn('SERVER', 'Shutting down gracefully...');
+app.use((err, req, res, next) => {
+  logger.error('SERVER', `Unhandled HTTP error on ${req.method} ${req.originalUrl}`, {
+    message: err?.message || String(err),
+    stack: err?.stack,
+  });
+
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+
+  res.status(err.status || err.statusCode || 500).json({
+    status: 'error',
+    message: 'Internal server error',
+  });
+});
+
+let isShuttingDown = false;
+
+function shutdown(reason = 'shutdown', exitCode = 0) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
+  logger.warn('SERVER', `Shutting down gracefully... (${reason})`);
 
   for (const manager of [bingoManager, tictactoeManager, utttManager, dabManager, sosManager, connect4Manager]) {
     for (const [id] of manager.rooms) {
@@ -136,11 +158,32 @@ function shutdown() {
     manager.timers.clear();
   }
 
-  server.close();
+  server.close(() => {
+    if (process.env.NODE_ENV !== 'test') {
+      process.exit(exitCode);
+    }
+  });
+}
+
+function handleFatalError(type, error) {
+  logger.error('SERVER', type, {
+    message: error?.message || String(error),
+    stack: error?.stack,
+  });
+
+  if (process.env.NODE_ENV !== 'test') {
+    shutdown(type, 1);
+  }
 }
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
+process.on('uncaughtException', (error) => handleFatalError('Uncaught exception', error));
+process.on('unhandledRejection', (reason) => {
+  const error = reason instanceof Error ? reason : new Error(String(reason));
+  handleFatalError('Unhandled promise rejection', error);
+});
+server.on('error', (error) => handleFatalError('Server error', error));
 
 if (process.env.NODE_ENV !== 'test') {
   server.listen(PORT, HOST, () => {

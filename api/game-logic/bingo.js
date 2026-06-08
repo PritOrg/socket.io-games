@@ -8,22 +8,27 @@ class BingoManager extends BaseManager {
   }
 
   handleConnection(socket) {
-    socket.on(`${this.gamePrefix}_createRoom`, (creatorName) => this.createRoom(socket, creatorName));
-    socket.on(`${this.gamePrefix}_joinRoom`, (data) => this.joinRoom(socket, data));
-    socket.on(`${this.gamePrefix}_startGame`, (roomId) => this.startGame(socket, roomId));
-    socket.on(`${this.gamePrefix}_markNumber`, (data) => this.markNumber(socket, data));
-    socket.on(`${this.gamePrefix}_achieved`, (roomId) => this.bingoAchieved(socket, roomId));
-    socket.on(`${this.gamePrefix}_restartGame`, (roomId) => this.restartGame(socket, roomId));
-    socket.on(`${this.gamePrefix}_leaveRoom`, (roomId) => this.leaveRoom(socket, roomId));
-    socket.on(`${this.gamePrefix}_reconnect`, (data) => this.reconnect(socket, data));
-    socket.on(`${this.gamePrefix}_requestRoomInfo`, (roomId) => {
+    this.onSocketEvent(socket, `${this.gamePrefix}_createRoom`, (creatorName) => this.createRoom(socket, creatorName));
+    this.onSocketEvent(socket, `${this.gamePrefix}_joinRoom`, (data) => this.joinRoom(socket, data));
+    this.onSocketEvent(socket, `${this.gamePrefix}_startGame`, (roomId) => this.startGame(socket, roomId));
+    this.onSocketEvent(socket, `${this.gamePrefix}_markNumber`, (data) => this.markNumber(socket, data));
+    this.onSocketEvent(socket, `${this.gamePrefix}_achieved`, (roomId) => this.bingoAchieved(socket, roomId));
+    this.onSocketEvent(socket, `${this.gamePrefix}_restartGame`, (roomId) => this.restartGame(socket, roomId));
+    this.onSocketEvent(socket, `${this.gamePrefix}_leaveRoom`, (roomId) => this.leaveRoom(socket, roomId));
+    this.onSocketEvent(socket, `${this.gamePrefix}_reconnect`, (data) => this.reconnect(socket, data));
+    this.onSocketEvent(socket, `${this.gamePrefix}_requestRoomInfo`, (roomId) => {
       const sanitized = this.sanitizeRoomId(roomId);
       if (sanitized) this.sendRoomInfo(sanitized);
     });
-    socket.on('server_shutdown', () => {
-      this.clearAllTimersForRoom(socket.id);
+    this.onSocketEvent(socket, 'server_shutdown', () => {
+      const rooms = this.socketRooms.get(socket.id);
+      if (rooms) {
+        for (const roomId of rooms) {
+          this.clearAllTimersForRoom(roomId);
+        }
+      }
     });
-    socket.on('disconnect', () => this.handleDisconnect(socket));
+    this.onSocketEvent(socket, 'disconnect', () => this.handleDisconnect(socket));
   }
 
   createRoom(socket, data) {
@@ -51,7 +56,6 @@ class BingoManager extends BaseManager {
       turnOrder: [socket.id],
       gameState: 'waiting',
       strikedNumbers: [],
-      markedNumbers: {},
       playerBoards: {},
       playerBingos: {},
     };
@@ -138,7 +142,6 @@ class BingoManager extends BaseManager {
       }
       room.playerBoards[player.id] = nums;
       room.playerBingos[player.id] = 0;
-      room.markedNumbers[player.id] = [];
     });
 
     this.io.to(sanitizedRoomId).emit(`${this.gamePrefix}_gameStarted`, {
@@ -327,11 +330,13 @@ class BingoManager extends BaseManager {
     if (room.gameState === 'playing') {
       room.players[playerIndex].connected = false;
 
+      this.clearTimer(`turn_${roomIdSanitized}`);
+
       const activeCount = room.players.filter((p) => p.connected).length;
 
       if (activeCount === 0) {
-        this.registerEmptyTimer(roomId, () => {
-          this.rooms.delete(roomId);
+        this.registerEmptyTimer(roomIdSanitized, () => {
+          this.rooms.delete(roomIdSanitized);
         });
       } else if (activeCount === 1) {
         room.gameState = 'paused';
@@ -341,7 +346,7 @@ class BingoManager extends BaseManager {
       room.players.splice(playerIndex, 1);
       room.turnOrder = room.turnOrder.filter((id) => id !== socket.id);
       if (room.players.length === 0) {
-        this.rooms.delete(roomId);
+        this.rooms.delete(roomIdSanitized);
         return;
       }
       if (room.creator === socket.id) {
@@ -355,31 +360,70 @@ class BingoManager extends BaseManager {
   }
 
   reconnect(socket, { roomId, playerId }) {
-    const roomIdSanitized = this.sanitizeRoomId(roomId);
+    const validation = this.validateReconnectPayload({ roomId, playerId }, socket);
+    if (!validation) return false;
+
+    const roomIdSanitized = validation.roomId;
     const room = this.rooms.get(roomIdSanitized);
+
     if (!room) {
+      this.onSocketError(socket, new Error(`Room ${roomId} not found`), 'reconnect');
       socket.emit(`${this.gamePrefix}_alert`, {
         icon: 'error',
-        title: 'Error',
-        text: 'Room not found',
+        title: 'Room Not Found',
+        text: 'The room you were trying to reconnect to no longer exists.',
       });
-      return;
+      socket.emit(`${this.gamePrefix}_reconnectFailed`, {
+        reason: 'room_not_found',
+        roomId: roomIdSanitized,
+      });
+      return false;
     }
-    const player = room.players.find((p) => p.id === playerId);
+
+    const player = room.players.find((p) => p.id === validation.playerId);
     if (!player) {
+      this.onSocketError(socket, new Error(`Player ${playerId} not found in room`), 'reconnect');
       socket.emit(`${this.gamePrefix}_alert`, {
         icon: 'error',
-        title: 'Error',
-        text: 'Player not found',
+        title: 'Player Not Found',
+        text: 'Your player session was not found in the room.',
+      });
+      socket.emit(`${this.gamePrefix}_reconnectFailed`, {
+        reason: 'player_not_found',
+        roomId: roomIdSanitized,
+      });
+      return false;
+    }
+
+    if (room.gameState === 'ended') {
+      this.onSocketError(socket, new Error(`Game has ended`), 'reconnect');
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'info',
+        title: 'Game Ended',
+        text: 'Cannot reconnect to an ended game. You will be redirected to the lobby.',
+      });
+      socket.emit(`${this.gamePrefix}_reconnectFailed`, {
+        reason: 'game_already_ended',
+        roomId: roomIdSanitized,
       });
       return false;
     }
 
     socket.join(room.id);
+    const oldId = player.id;
     player.id = socket.id;
     player.connected = true;
     this._trackSocket(socket.id, room.id);
 
+    // Re-key per-player state dicts to new socket ID
+    if (room.playerBoards[oldId]) {
+      room.playerBoards[socket.id] = room.playerBoards[oldId];
+      delete room.playerBoards[oldId];
+    }
+    if (room.playerBingos[oldId] !== undefined) {
+      room.playerBingos[socket.id] = room.playerBingos[oldId];
+      delete room.playerBingos[oldId];
+    }
     // Clear empty timer on reconnect
     this.clearTimer(`empty_${roomIdSanitized}`);
 
@@ -387,7 +431,6 @@ class BingoManager extends BaseManager {
       const activeCount = room.players.filter((p) => p.connected).length;
       if (activeCount >= 2) {
         room.gameState = 'playing';
-        // Note: forfeit_${roomId} timer is never registered in this manager; clearTimer is a no-op pending forfeit feature
         this.clearTimer(`forfeit_${roomIdSanitized}`);
         this.io.to(room.id).emit(`${this.gamePrefix}_alert`, {
           icon: 'success',
@@ -399,9 +442,9 @@ class BingoManager extends BaseManager {
 
     this.sendRoomInfo(room.id);
 
-    if (room.playerBoards[playerId]) {
+    if (room.playerBoards[socket.id]) {
       socket.emit(`${this.gamePrefix}_playerBoard`, {
-        board: room.playerBoards[playerId],
+        board: room.playerBoards[socket.id],
       });
     }
 
@@ -414,23 +457,36 @@ class BingoManager extends BaseManager {
     for (const roomId of [...roomIds]) {
       const room = this.rooms.get(roomId);
       if (!room) continue;
-      const index = room.players.findIndex((p) => p.id === socket.id);
-      if (index !== -1) {
-        this.handlePlayerLeave(socket, roomId, {
-          onPlayerLeft: (_r, _s, _p) => {
-            room.players.splice(index, 1);
-            room.turnOrder = room.turnOrder.filter((id) => id !== socket.id);
+      const playerIndex = room.players.findIndex((p) => p.id === socket.id);
+      if (playerIndex === -1) continue;
 
-            if (room.players.length === 0) {
-              this.rooms.delete(roomId);
-            } else {
-              if (room.creator === socket.id) room.creator = room.players[0].id;
-              this.io.to(roomId).emit(`${this.gamePrefix}_playerLeft`, { playerId: socket.id });
-              this.sendRoomInfo(roomId);
-            }
-          },
-        });
+      if (room.gameState === 'playing') {
+        room.players[playerIndex].connected = false;
+        const activeCount = room.players.filter((p) => p.connected).length;
+
+        if (activeCount === 0) {
+          this.registerEmptyTimer(roomId, () => {
+            this.rooms.delete(roomId);
+          });
+        } else if (activeCount === 1) {
+          room.gameState = 'paused';
+          this.clearTimer(`turn_${roomId}`);
+          this.io.to(room.id).emit(`${this.gamePrefix}_gamePaused`, { reason: 'Opponent disconnected' });
+        }
+      } else {
+        room.players.splice(playerIndex, 1);
+        room.turnOrder = room.turnOrder.filter((id) => id !== socket.id);
+        if (room.players.length === 0) {
+          this.rooms.delete(roomId);
+          continue;
+        }
+        if (room.creator === socket.id) {
+          room.creator = room.players[0].id;
+        }
       }
+
+      this.io.to(room.id).emit(`${this.gamePrefix}_playerLeft`, { playerId: socket.id });
+      this.sendRoomInfo(room.id);
     }
     this.socketRooms.delete(socket.id);
   }

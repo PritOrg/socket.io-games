@@ -19,6 +19,7 @@ const Connect4Game = () => {
   const [players, setPlayers] = useState([]);
   const [spectators, setSpectators] = useState([]);
   const [currentTurn, setCurrentTurn] = useState(null);
+  const [myPlayerIndex, setMyPlayerIndex] = useState(-1);
   const [hoverCol, setHoverCol] = useState(null);
   const [winLine, setWinLine] = useState(null);
   const [lastMove, setLastMove] = useState(null);
@@ -76,6 +77,8 @@ const Connect4Game = () => {
         setGameState(data.gameState);
         setCurrentTurn(data.currentTurn);
         setBoard(data.board || []);
+        const myPlayer = data.players?.find((p) => p.id === socket.id);
+        setMyPlayerIndex(myPlayer ? data.players.findIndex((p) => p.id === myPlayer.id) : -1);
       },
       c4_gameStarted: () => {
         setGameState('playing');
@@ -103,6 +106,26 @@ const Connect4Game = () => {
       },
       c4_alert: ({ icon, title, text }) => {
         Swal.fire({ icon, title, text });
+      },
+      c4_reconnectFailed: ({ reason, roomId: failedRoomId }) => {
+        Swal.fire({
+          title: 'Reconnection Failed',
+          text:
+            reason === 'room_not_found'
+              ? 'The room no longer exists.'
+              : reason === 'player_not_found'
+                ? 'Your player session was not found.'
+                : reason === 'game_already_ended'
+                  ? 'The game has ended.'
+                  : 'Could not reconnect to the game.',
+          icon: 'error',
+          customClass: { popup: sketchPopupClass },
+        }).then(() => {
+          clearReconnect();
+          clearRoomId();
+          setGameState('lobby');
+          navigate('/');
+        });
       },
       server_shutdown: ({ message }) => {
         Swal.fire({
@@ -154,11 +177,11 @@ const Connect4Game = () => {
   const handleColumnClick = useCallback(
     (col) => {
       if (!roomId || gameState !== 'playing') return;
-      if (currentTurn !== socket?.id) return;
+      if (myPlayerIndex !== currentTurn) return;
 
       socket.emit('c4_makeMove', { roomId, column: col });
     },
-    [roomId, gameState, currentTurn, socket],
+    [roomId, gameState, myPlayerIndex, currentTurn, socket],
   );
 
   const isSpectator = spectators.some((s) => s.id === socket?.id);
@@ -194,7 +217,7 @@ const Connect4Game = () => {
   }
 
   if (roomId && gameState === 'playing') {
-    const canPlay = currentTurn === socket?.id && !isSpectator;
+    const canPlay = myPlayerIndex === currentTurn && !isSpectator;
 
     return (
       <GameLayout players={players}>
@@ -274,7 +297,7 @@ const Connect4Game = () => {
           <input
             type="text"
             value={profile.name}
-            onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+            onChange={(e) => setProfile((prev) => ({ ...prev, name: e.target.value }))}
             placeholder="Enter name"
             className="sketch-input w-full mt-1"
             maxLength={20}
@@ -284,8 +307,8 @@ const Connect4Game = () => {
         <AvatarSelector
           avatarIcon={profile.avatarIcon}
           color={profile.color}
-          onAvatarChange={(icon) => setProfile({ ...profile, avatarIcon: icon })}
-          onColorChange={(c) => setProfile({ ...profile, color: c })}
+          onAvatarChange={(icon) => setProfile((prev) => ({ ...prev, avatarIcon: icon }))}
+          onColorChange={(c) => setProfile((prev) => ({ ...prev, color: c }))}
         />
 
         <SketchButton onClick={handleCreateRoom} className="w-full">

@@ -76,11 +76,18 @@ const TicTacToe = () => {
         setPlayers(players);
         setGameState(gameState);
         setCurrentTurn(currentTurn);
-        if (board) setBoard(board);
+        if (board) setBoard([...board]);
         const playerIndex = players.findIndex((p) => p.id === socket.id);
         if (playerIndex !== -1) {
           sessionStorage.setItem('ttt_reconnect', JSON.stringify({ roomId: id, playerId: players[playerIndex].id }));
         }
+      },
+      ttt_moveMade: ({ board, lastMove }) => {
+        if (board) setBoard([...board]);
+        if (lastMove) setLastMove(lastMove);
+      },
+      ttt_nextTurn: ({ nextPlayerId }) => {
+        setCurrentTurn(nextPlayerId);
       },
       ttt_gameStarted: () => {
         setGameState('playing');
@@ -128,6 +135,25 @@ const TicTacToe = () => {
       },
       ttt_alert: ({ icon, title, text }) => {
         Swal.fire({ icon, title, text, customClass: { popup: sketchPopupClass } });
+      },
+      ttt_reconnectFailed: ({ reason, roomId: failedRoomId }) => {
+        Swal.fire({
+          title: 'Reconnection Failed',
+          text:
+            reason === 'room_not_found'
+              ? 'The room no longer exists.'
+              : reason === 'player_not_found'
+                ? 'Your player session was not found.'
+                : reason === 'game_already_ended'
+                  ? 'The game has ended.'
+                  : 'Could not reconnect to the game.',
+          icon: 'error',
+          customClass: { popup: sketchPopupClass },
+        }).then(() => {
+          clearReconnect();
+          clearRoomId(failedRoomId);
+          navigate('/');
+        });
       },
       server_shutdown: ({ message }) => {
         Swal.fire({
@@ -216,15 +242,15 @@ const TicTacToe = () => {
           <input
             type="text"
             value={profile.name}
-            onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+            onChange={(e) => setProfile((prev) => ({ ...prev, name: e.target.value }))}
             placeholder="Enter your name"
             className="w-full px-3 py-2 border border-ink/30 rounded sketch-font text-ink bg-white/80"
           />
           <AvatarSelector
             avatarIcon={profile.avatarIcon}
             color={profile.color}
-            onAvatarChange={(icon) => setProfile({ ...profile, avatarIcon: icon })}
-            onColorChange={(c) => setProfile({ ...profile, color: c })}
+            onAvatarChange={(icon) => setProfile((prev) => ({ ...prev, avatarIcon: icon }))}
+            onColorChange={(c) => setProfile((prev) => ({ ...prev, color: c }))}
           />
         </SketchCard>
         <SketchCard className="p-8 max-w-md w-full">
@@ -248,11 +274,11 @@ const TicTacToe = () => {
             </span>
           </div>
           <div className="flex flex-col gap-2">
-            {players.map((p, idx) => (
+            {players.map((p, _idx) => (
               <div key={p.id} className="flex items-center gap-2 sketch-border px-3 py-2">
                 <span className="text-lg">{p.connected !== false ? '☑️' : '☐'}</span>
                 <span className="font-handwriting text-ink flex-1 truncate">{p.name}</span>
-                {idx === 0 && <span className="text-xs opacity-60">(You)</span>}
+                {p.id === socket?.id && <span className="text-xs opacity-60">(You)</span>}
               </div>
             ))}
           </div>
@@ -280,7 +306,7 @@ const TicTacToe = () => {
               <div className="mb-4 text-center">
                 <div className="flex items-center justify-center gap-2">
                   <span className="font-sketch text-xl text-ink">
-                    {currentTurn === socket?.id ? 'Your turn!' : "Opponent's turn"}
+                    {currentTurn === socket?.id ? 'Your turn!' : 'Waiting for opponent...'}
                   </span>
                 </div>
               </div>
@@ -299,7 +325,7 @@ const TicTacToe = () => {
         {gameState === 'ended' && (
           <div className="mt-4 text-center">
             <SketchButton onClick={handleRestartGame} className="text-sm px-3 py-1">
-              Play Again
+              Rematch
             </SketchButton>
           </div>
         )}

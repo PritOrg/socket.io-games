@@ -25,7 +25,7 @@ const GameLayout = ({ players = [], children }) => {
     if (gamePrefix && roomId) {
       socket?.emit(`${gamePrefix}_leaveRoom`, roomId);
     }
-    clearRoomId();
+    clearRoomId(roomId);
     navigate('/');
   };
 

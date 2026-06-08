@@ -39,7 +39,12 @@ const MacroGrid = ({ board, macroBoard, activeGrid, lastMove, onCellClick }) => 
               gridIndex={gridIndex}
               gridData={board[gridIndex]}
               macroWinner={macroBoard[gridIndex]}
-              isActive={activeGrid === null || activeGrid === gridIndex || macroBoard[gridIndex] === 'DEAD'}
+              isActive={
+                macroBoard[gridIndex] === null &&
+                (activeGrid === null ||
+                  activeGrid === gridIndex ||
+                  (activeGrid !== null && macroBoard[activeGrid] !== null))
+              }
               isLastMoveGrid={lastMove?.gridIndex === gridIndex}
               lastMoveSquare={lastMove?.gridIndex === gridIndex ? lastMove?.squareIndex : null}
               onSquareClick={(squareIndex) => onCellClick(gridIndex, squareIndex)}

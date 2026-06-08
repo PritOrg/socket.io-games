@@ -71,12 +71,13 @@ const DabGame = () => {
       customClass: { popup: sketchPopupClass },
     }).then((result) => {
       if (result.isConfirmed) {
+        socket.emit('dab_leaveRoom', roomId);
         sessionStorage.removeItem('dab_reconnect');
         clearRoomId(roomId);
         navigate('/');
       }
     });
-  }, [clearRoomId, navigate, roomId]);
+  }, [socket, clearRoomId, navigate, roomId]);
 
   const handleStart = useCallback(
     ({ rows: gameRows, cols: gameCols }) => {
@@ -198,6 +199,7 @@ const DabGame = () => {
         }
         setScores(newScores);
         setCurrentTurn(newTurn);
+        setLastMove({ lineType, r, c });
       },
       dab_gameOver: ({ winner, scores: finalScores }) => {
         logger.socket('⬅️', 'dab_gameOver');
@@ -233,27 +235,6 @@ const DabGame = () => {
         setLastMove(null);
         setRedoRequest(null);
       },
-      dab_redoResponse: ({ accepted, reason, requesterId, requesterName }) => {
-        if (!accepted) {
-          setRedoRequest(null);
-          if (reason === 'Requester disconnected.') {
-            Swal.fire({
-              title: 'Redo Failed',
-              text: 'The player who requested undo disconnected.',
-              icon: 'info',
-              customClass: { popup: sketchPopupClass },
-            });
-          } else {
-            const name = requesterName || players.find((p) => p.id === requesterId)?.name || 'Someone';
-            Swal.fire({
-              title: 'Undo Denied',
-              text: `${name}'s undo request was denied.`,
-              icon: 'warning',
-              customClass: { popup: sketchPopupClass },
-            });
-          }
-        }
-      },
     },
     [rows, cols, players, playBox, playLine, roomId],
   );
@@ -280,7 +261,28 @@ const DabGame = () => {
               customClass: { popup: sketchPopupClass },
             });
           }
+        } else {
+          setRedoRequest(null);
         }
+      },
+      dab_reconnectFailed: ({ reason, roomId }) => {
+        Swal.fire({
+          title: 'Reconnection Failed',
+          text:
+            reason === 'room_not_found'
+              ? 'The room no longer exists.'
+              : reason === 'player_not_found'
+                ? 'Your player session was not found.'
+                : reason === 'game_already_ended'
+                  ? 'The game has ended.'
+                  : 'Could not reconnect to the game.',
+          icon: 'error',
+          customClass: { popup: sketchPopupClass },
+        }).then(() => {
+          sessionStorage.removeItem('dab_reconnect');
+          clearRoomId(roomId);
+          navigate('/');
+        });
       },
       server_shutdown: ({ message }) => {
         Swal.fire({
@@ -335,7 +337,6 @@ const DabGame = () => {
       const arr = lineType === 'h' ? horizontalLines : verticalLines;
       if (arr[r]?.[c] !== null) return;
       socket.emit('dab_makeMove', { roomId, lineType, r, c });
-      setLastMove({ lineType, r, c });
     },
     [gameState, isPaused, myPlayerIndex, currentTurn, horizontalLines, verticalLines, roomId, socket],
   );

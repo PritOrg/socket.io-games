@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import io from 'socket.io-client';
 import logger from '../utils/logger';
+import { reportRuntimeError } from '../utils/runtimeError';
 
 export const GameContext = createContext();
 
@@ -13,7 +14,6 @@ export const useGameContext = () => {
 };
 
 export const GameProvider = ({ children }) => {
-  const [playerName, setPlayerName] = useState('');
   const [profile, setProfile] = useState(() => {
     const saved = localStorage.getItem('playerProfile');
     return saved
@@ -27,12 +27,11 @@ export const GameProvider = ({ children }) => {
   const [roomId, setRoomId] = useState(null);
   const [gamePrefix, setGamePrefix] = useState(null);
   const [socket, setSocket] = useState(null);
+  const [reconnectionState, setReconnectionState] = useState('disconnected');
   const socketRef = useRef(null);
-
-  useEffect(() => {
-    const savedName = localStorage.getItem('playerName');
-    if (savedName) setPlayerName(savedName);
-  }, []);
+  const lastDisconnectTimeRef = useRef(null);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimeoutsRef = useRef([]);
 
   useEffect(() => {
     localStorage.setItem('playerProfile', JSON.stringify(profile));
@@ -48,29 +47,36 @@ export const GameProvider = ({ children }) => {
 
     newSocket.on('connect', () => {
       logger.info('SOCKET', `Connected with ID: ${newSocket.id}`);
+      setReconnectionState('connected');
+      reconnectAttemptsRef.current = 0;
     });
 
     newSocket.on('disconnect', (reason) => {
       logger.warn('SOCKET', `Disconnected: ${reason}`);
+      setReconnectionState('disconnected');
+      lastDisconnectTimeRef.current = Date.now();
     });
 
     newSocket.on('connect_error', (error) => {
       logger.error('SOCKET', `Connection error: ${error.message}`);
+      reportRuntimeError('Socket connection error', error);
+    });
+
+    newSocket.on('error', (error) => {
+      logger.error('SOCKET', `Socket error: ${error?.message || error}`);
+      reportRuntimeError('Socket error', error);
     });
 
     logger.info('SOCKET', 'Initializing socket connection...');
 
     return () => {
       logger.info('SOCKET', 'Cleaning up socket connection');
+      for (const timeout of reconnectTimeoutsRef.current) {
+        clearTimeout(timeout);
+      }
       newSocket.disconnect();
     };
   }, []);
-
-  useEffect(() => {
-    if (playerName) {
-      localStorage.setItem('playerName', playerName);
-    }
-  }, [playerName]);
 
   const roomIdRef = useRef(roomId);
   useEffect(() => {
@@ -83,23 +89,33 @@ export const GameProvider = ({ children }) => {
     }
   };
 
-  const clearReconnect = (prefix) => {
+  const clearReconnect = useCallback((prefix) => {
     sessionStorage.removeItem(`${prefix}_reconnect`);
-  };
+  }, []);
 
-  const leaveRoom = (prefix, roomId) => {
-    socket?.emit(`${prefix}_leaveRoom`, roomId);
-    clearReconnect(prefix);
-    clearRoomId(roomId);
-  };
+  const leaveRoom = useCallback(
+    (prefix, roomId) => {
+      socket?.emit(`${prefix}_leaveRoom`, roomId);
+      clearReconnect(prefix);
+      clearRoomId(roomId);
+    },
+    [socket, clearReconnect],
+  );
 
   const setPlayerProfileName = (name) => {
     setProfile((prev) => ({ ...prev, name }));
-    setPlayerName(name);
   };
 
+  const handleReconnectFailure = useCallback(
+    ({ reason, roomId }) => {
+      reconnectAttemptsRef.current++;
+      sessionStorage.removeItem(`${gamePrefix}_reconnect`);
+    },
+    [gamePrefix],
+  );
+
   const value = {
-    playerName,
+    playerName: profile.name,
     setPlayerName: setPlayerProfileName,
     profile,
     setProfile,
@@ -111,6 +127,9 @@ export const GameProvider = ({ children }) => {
     setGamePrefix,
     leaveRoom,
     clearReconnect,
+    reconnectionState,
+    reconnectAttempts: reconnectAttemptsRef.current,
+    handleReconnectFailure,
   };
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;

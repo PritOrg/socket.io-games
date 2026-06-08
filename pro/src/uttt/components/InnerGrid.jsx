@@ -28,12 +28,12 @@ const InnerGrid = ({ _gridIndex, gridData, macroWinner, isActive, isLastMoveGrid
       <button
         key={squareIndex}
         onClick={() => onSquareClick(squareIndex)}
-        disabled={!isActive || value !== null || macroWinner === 'DEAD'}
+        disabled={!isActive || value !== null}
         className={`
           relative aspect-square flex items-center justify-center
           text-xs sm:text-base md:text-xl lg:text-2xl font-bold font-sketch transition-all duration-200
           ${
-            !isActive || value !== null || macroWinner === 'DEAD'
+            !isActive || value !== null
               ? 'cursor-not-allowed'
               : 'hover:bg-blue-100/40 cursor-pointer active:scale-95 hover:scale-105'
           }

@@ -7,21 +7,26 @@ class SOSManager extends BaseManager {
   }
 
   handleConnection(socket) {
-    socket.on(`${this.gamePrefix}_createRoom`, (data) => this.createRoom(socket, data));
-    socket.on(`${this.gamePrefix}_joinRoom`, (data) => this.joinRoom(socket, data));
-    socket.on(`${this.gamePrefix}_reconnect`, (data) => this.reconnect(socket, data));
-    socket.on(`${this.gamePrefix}_leaveRoom`, (roomId) => this.leaveRoom(socket, roomId));
-    socket.on(`${this.gamePrefix}_makeMove`, (data) => this.makeMove(socket, data));
-    socket.on(`${this.gamePrefix}_startGame`, (data) => this.startGame(socket, data));
-    socket.on(`${this.gamePrefix}_restartGame`, (roomId) => this.restartGame(socket, roomId));
-    socket.on(`${this.gamePrefix}_requestRoomInfo`, (roomId) => {
+    this.onSocketEvent(socket, `${this.gamePrefix}_createRoom`, (data) => this.createRoom(socket, data));
+    this.onSocketEvent(socket, `${this.gamePrefix}_joinRoom`, (data) => this.joinRoom(socket, data));
+    this.onSocketEvent(socket, `${this.gamePrefix}_reconnect`, (data) => this.reconnect(socket, data));
+    this.onSocketEvent(socket, `${this.gamePrefix}_leaveRoom`, (roomId) => this.leaveRoom(socket, roomId));
+    this.onSocketEvent(socket, `${this.gamePrefix}_makeMove`, (data) => this.makeMove(socket, data));
+    this.onSocketEvent(socket, `${this.gamePrefix}_startGame`, (data) => this.startGame(socket, data));
+    this.onSocketEvent(socket, `${this.gamePrefix}_restartGame`, (roomId) => this.restartGame(socket, roomId));
+    this.onSocketEvent(socket, `${this.gamePrefix}_requestRoomInfo`, (roomId) => {
       const sanitized = this.sanitizeRoomId(roomId);
       if (sanitized) this.sendRoomInfo(sanitized);
     });
-    socket.on('server_shutdown', () => {
-      this.clearAllTimersForRoom(socket.id);
+    this.onSocketEvent(socket, 'server_shutdown', () => {
+      const rooms = this.socketRooms.get(socket.id);
+      if (rooms) {
+        for (const roomId of rooms) {
+          this.clearAllTimersForRoom(roomId);
+        }
+      }
     });
-    socket.on('disconnect', () => this.handleDisconnect(socket));
+    this.onSocketEvent(socket, 'disconnect', () => this.handleDisconnect(socket));
   }
 
   createRoom(socket, { playerName, avatarIcon, color, size }) {
@@ -151,16 +156,29 @@ class SOSManager extends BaseManager {
   }
 
   reconnect(socket, { roomId, playerId }) {
-    const sanitizedRoomId = this.sanitizeRoomId(roomId);
+    const validation = this.validateReconnectPayload({ roomId, playerId }, socket);
+    if (!validation) return false;
+
+    const sanitizedRoomId = validation.roomId;
     const room = this.rooms.get(sanitizedRoomId);
+
     if (!room) {
-      socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Error', text: 'Room not found' });
-      return;
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Room Not Found',
+        text: 'The room you were trying to reconnect to no longer exists.',
+      });
+      socket.emit(`${this.gamePrefix}_reconnectFailed`, {
+        reason: 'room_not_found',
+        roomId: sanitizedRoomId,
+      });
+      return false;
     }
 
-    let player = room.players.find((p) => p.id === playerId);
+    let player = room.players.find((p) => p.id === validation.playerId);
     if (player) {
       socket.join(room.id);
+      const oldId = player.id;
       player.id = socket.id;
       player.connected = true;
       this._trackSocket(socket.id, room.id);
@@ -171,7 +189,6 @@ class SOSManager extends BaseManager {
         const activeCount = room.players.filter((p) => p.connected).length;
         if (activeCount >= 2) {
           room.gameState = 'playing';
-          // Note: forfeit_${roomId} timer is never registered in this manager; clearTimer is a no-op pending forfeit feature
           this.io.to(room.id).emit(`${this.gamePrefix}_alert`, {
             icon: 'success',
             title: 'Player Reconnected',
@@ -180,12 +197,23 @@ class SOSManager extends BaseManager {
         }
       }
     } else {
-      const spectator = room.spectators.find((s) => s.id === playerId);
+      const spectator = room.spectators.find((s) => s.id === validation.playerId);
       if (spectator) {
         socket.join(room.id);
         spectator.id = socket.id;
         spectator.connected = true;
         this._trackSocket(socket.id, room.id);
+      } else {
+        socket.emit(`${this.gamePrefix}_alert`, {
+          icon: 'error',
+          title: 'Player Not Found',
+          text: 'Your player session was not found in the room.',
+        });
+        socket.emit(`${this.gamePrefix}_reconnectFailed`, {
+          reason: 'player_not_found',
+          roomId: sanitizedRoomId,
+        });
+        return false;
       }
     }
 

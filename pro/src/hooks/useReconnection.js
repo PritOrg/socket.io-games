@@ -1,7 +1,23 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 
-const useReconnection = ({ socket, gamePrefix, _roomId, onRestore }) => {
+const useReconnection = ({ socket, gamePrefix, onRestore, onReconnectFailure }) => {
   const attemptedRef = useRef(false);
+  const reconnectAttemptsRef = useRef(0);
+  const lastDisconnectTimeRef = useRef(null);
+
+  const clearReconnect = useCallback(() => {
+    sessionStorage.removeItem(`${gamePrefix}_reconnect`);
+  }, [gamePrefix]);
+
+  const handleReconnectFailure = useCallback(
+    (reason, roomId) => {
+      reconnectAttemptsRef.current++;
+      if (onReconnectFailure) {
+        onReconnectFailure(reason, roomId);
+      }
+    },
+    [onReconnectFailure],
+  );
 
   useEffect(() => {
     if (!socket) return;
@@ -13,20 +29,25 @@ const useReconnection = ({ socket, gamePrefix, _roomId, onRestore }) => {
       attemptedRef.current = true;
       try {
         const parsed = JSON.parse(saved);
+        if (!parsed.roomId || !parsed.playerId) {
+          clearReconnect();
+          return;
+        }
         socket.emit(`${gamePrefix}_reconnect`, {
           roomId: parsed.roomId,
           playerId: parsed.playerId,
         });
       } catch {
-        // ignore corrupt data
+        clearReconnect();
       }
     }
-  }, [socket, gamePrefix]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [socket, gamePrefix, clearReconnect]);
 
   useEffect(() => {
     if (!socket) return;
 
     const handleRoomInfo = (room) => {
+      reconnectAttemptsRef.current = 0;
       if (socket.id && room.players) {
         const myPlayer = room.players.find((p) => p.id === socket.id) || room.players[room.currentTurn];
         if (myPlayer && onRestore) {
@@ -35,13 +56,23 @@ const useReconnection = ({ socket, gamePrefix, _roomId, onRestore }) => {
       }
     };
 
-    socket.on(`${gamePrefix}_roomInfo`, handleRoomInfo);
-    return () => socket.off(`${gamePrefix}_roomInfo`, handleRoomInfo);
-  }, [socket, gamePrefix, onRestore]);
+    const handleReconnectFailed = ({ reason, roomId }) => {
+      reconnectAttemptsRef.current++;
 
-  const clearReconnect = () => {
-    sessionStorage.removeItem(`${gamePrefix}_reconnect`);
-  };
+      if (reason === 'room_not_found' || reason === 'player_not_found' || reason === 'game_already_ended') {
+        clearReconnect();
+      }
+
+      handleReconnectFailure(reason, roomId);
+    };
+
+    socket.on(`${gamePrefix}_roomInfo`, handleRoomInfo);
+    socket.on(`${gamePrefix}_reconnectFailed`, handleReconnectFailed);
+    return () => {
+      socket.off(`${gamePrefix}_roomInfo`, handleRoomInfo);
+      socket.off(`${gamePrefix}_reconnectFailed`, handleReconnectFailed);
+    };
+  }, [socket, gamePrefix, onRestore, clearReconnect, handleReconnectFailure]);
 
   return { clearReconnect };
 };

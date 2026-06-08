@@ -7,20 +7,25 @@ class TicTacToeManager extends BaseManager {
   }
 
   handleConnection(socket) {
-    socket.on('ttt_createRoom', (data) => this.createRoom(socket, data));
-    socket.on('ttt_joinRoom', (data) => this.joinRoom(socket, data));
-    socket.on('ttt_makeMove', (data) => this.makeMove(socket, data));
-    socket.on('ttt_restartGame', (roomId) => this.restartGame(socket, roomId));
-    socket.on('ttt_leaveRoom', (roomId) => this.leaveRoom(socket, roomId));
-    socket.on('ttt_reconnect', (data) => this.reconnect(socket, data));
-    socket.on('ttt_requestRoomInfo', (roomId) => {
+    this.onSocketEvent(socket, 'ttt_createRoom', (data) => this.createRoom(socket, data));
+    this.onSocketEvent(socket, 'ttt_joinRoom', (data) => this.joinRoom(socket, data));
+    this.onSocketEvent(socket, 'ttt_makeMove', (data) => this.makeMove(socket, data));
+    this.onSocketEvent(socket, 'ttt_restartGame', (roomId) => this.restartGame(socket, roomId));
+    this.onSocketEvent(socket, 'ttt_leaveRoom', (roomId) => this.leaveRoom(socket, roomId));
+    this.onSocketEvent(socket, 'ttt_reconnect', (data) => this.reconnect(socket, data));
+    this.onSocketEvent(socket, 'ttt_requestRoomInfo', (roomId) => {
       const sanitized = this.sanitizeRoomId(roomId);
       if (sanitized) this.sendRoomInfo(sanitized);
     });
-    socket.on('server_shutdown', () => {
-      this.clearAllTimersForRoom(socket.id);
+    this.onSocketEvent(socket, 'server_shutdown', () => {
+      const rooms = this.socketRooms.get(socket.id);
+      if (rooms) {
+        for (const roomId of rooms) {
+          this.clearAllTimersForRoom(roomId);
+        }
+      }
     });
-    socket.on('disconnect', () => this.handleDisconnect(socket));
+    this.onSocketEvent(socket, 'disconnect', () => this.handleDisconnect(socket));
   }
 
   checkWinner(board) {
@@ -181,17 +186,52 @@ class TicTacToeManager extends BaseManager {
   }
 
   reconnect(socket, { roomId, playerId }) {
-    const roomIdSanitized = this.sanitizeRoomId(roomId);
+    const validation = this.validateReconnectPayload({ roomId, playerId }, socket);
+    if (!validation) return false;
+
+    const roomIdSanitized = validation.roomId;
     const room = this.rooms.get(roomIdSanitized);
+
     if (!room) {
-      socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Error', text: 'Room not found' });
-      return;
+      this.onSocketError(socket, new Error(`Room ${roomId} not found`), 'reconnect');
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Room Not Found',
+        text: 'The room you were trying to reconnect to no longer exists.',
+      });
+      socket.emit(`${this.gamePrefix}_reconnectFailed`, {
+        reason: 'room_not_found',
+        roomId: roomIdSanitized,
+      });
+      return false;
     }
 
-    const player = room.players.find((p) => p.id === playerId);
+    const player = room.players.find((p) => p.id === validation.playerId);
     if (!player) {
-      socket.emit(`${this.gamePrefix}_alert`, { icon: 'error', title: 'Error', text: 'Player not found in room' });
-      return;
+      this.onSocketError(socket, new Error(`Player ${playerId} not found in room`), 'reconnect');
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'error',
+        title: 'Player Not Found',
+        text: 'Your player session was not found in the room.',
+      });
+      socket.emit(`${this.gamePrefix}_reconnectFailed`, {
+        reason: 'player_not_found',
+        roomId: roomIdSanitized,
+      });
+      return false;
+    }
+
+    if (room.gameState === 'ended') {
+      socket.emit(`${this.gamePrefix}_alert`, {
+        icon: 'info',
+        title: 'Game Ended',
+        text: 'Cannot reconnect to an ended game.',
+      });
+      socket.emit(`${this.gamePrefix}_reconnectFailed`, {
+        reason: 'game_already_ended',
+        roomId: roomIdSanitized,
+      });
+      return false;
     }
 
     socket.join(room.id);
@@ -212,8 +252,6 @@ class TicTacToeManager extends BaseManager {
           text: 'Game resumed!',
         });
       }
-
-      // Note: forfeit_${roomId} timer is never registered in this manager; clearTimer is a no-op pending forfeit feature
     }
 
     this.sendRoomInfo(room.id);

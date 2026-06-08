@@ -1,4 +1,5 @@
 import React from 'react';
+import { reportRuntimeError } from '../utils/runtimeError';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -12,6 +13,7 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     this.setState({ error, errorInfo });
+    reportRuntimeError('React error boundary', error);
     console.error('Error caught by ErrorBoundary:', error, errorInfo);
   }
 

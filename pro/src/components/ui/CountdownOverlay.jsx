@@ -1,11 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 const CountdownOverlay = ({ onComplete }) => {
   const [count, setCount] = useState(3);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (count === 0) {
-      onComplete?.();
+      if (mountedRef.current) onComplete?.();
       return;
     }
     const t = setTimeout(() => setCount((c) => c - 1), 1000);

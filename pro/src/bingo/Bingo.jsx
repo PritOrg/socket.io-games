@@ -30,6 +30,7 @@ const Bingo = () => {
   const navigate = useNavigate();
 
   const strikedNumbersRef = useRef([]);
+  const timerRef = useRef(null);
   const [playPop] = useSound('/sounds/pop.mp3', { volume: 0.5 });
   const [playTurn] = useSound('/sounds/turn.mp3', { volume: 0.6 });
 
@@ -76,9 +77,13 @@ const Bingo = () => {
         setCurrentTurn(currentTurn);
         setIsCreator(creator === socket.id);
 
-        const savedBoard = localStorage.getItem(`bingo_board_${id}`);
-        if (savedBoard) {
-          setNumbers(JSON.parse(savedBoard));
+        try {
+          const savedBoard = localStorage.getItem(`bingo_board_${id}`);
+          if (savedBoard) {
+            setNumbers(JSON.parse(savedBoard));
+          }
+        } catch {
+          localStorage.removeItem(`bingo_board_${id}`);
         }
 
         if (strikedNumbers) {
@@ -89,7 +94,6 @@ const Bingo = () => {
         const sn = strikedNumbersRef.current;
         const updatedBoard = sn.length > 0 ? board.map((n) => (sn.includes(n) ? 'X' : n)) : board;
         setNumbers(updatedBoard);
-        localStorage.setItem(`bingo_board_${roomId}`, JSON.stringify(board));
       },
       bingo_gamePaused: ({ reason }) => {
         Swal.fire({
@@ -107,7 +111,6 @@ const Bingo = () => {
 
         if (playerBoards?.[socket.id]) {
           setNumbers(playerBoards[socket.id]);
-          localStorage.setItem(`bingo_board_${roomId}`, JSON.stringify(playerBoards[socket.id]));
         }
 
         Swal.fire({
@@ -121,11 +124,7 @@ const Bingo = () => {
       bingo_gameRestarted: () => {
         setGameState('ready');
         setStrikedOut('');
-        setNumbers((prev) => {
-          const fresh = prev.map((n) => (typeof n === 'number' ? n : n));
-          localStorage.setItem(`bingo_board_${roomId}`, JSON.stringify(fresh));
-          return fresh;
-        });
+        setNumbers(Array.from({ length: 25 }, (_, i) => i + 1));
       },
       bingo_numberMarked: ({ nextTurn, strikedNumbers }) => {
         setNumbers((prev) => prev.map((n) => (strikedNumbers.includes(n) ? 'X' : n)));
@@ -185,6 +184,25 @@ const Bingo = () => {
           });
         }
       },
+      bingo_reconnectFailed: ({ reason, roomId: failedRoomId }) => {
+        Swal.fire({
+          title: 'Reconnection Failed',
+          text:
+            reason === 'room_not_found'
+              ? 'The room no longer exists.'
+              : reason === 'player_not_found'
+                ? 'Your player session was not found.'
+                : reason === 'game_already_ended'
+                  ? 'The game has ended.'
+                  : 'Could not reconnect to the game.',
+          icon: 'error',
+          customClass: { popup: sketchPopupClass },
+        }).then(() => {
+          clearReconnect();
+          clearRoomId(failedRoomId);
+          navigate('/');
+        });
+      },
       server_shutdown: ({ message }) => {
         Swal.fire({
           title: 'Server Shutting Down',
@@ -233,14 +251,16 @@ const Bingo = () => {
   }, [socket, numbers, gameState, strikedOut, calculateBingoProgress, roomId]);
 
   useEffect(() => {
-    let timerInterval;
+    if (timerRef.current) clearInterval(timerRef.current);
     if (gameState === 'playing' && currentTurn === socket?.id && turnTimer > 0) {
-      timerInterval = setInterval(() => {
+      timerRef.current = setInterval(() => {
         setTurnTimer((prev) => prev - 1);
       }, 1000);
     }
-    return () => clearInterval(timerInterval);
-  }, [gameState, currentTurn, socket?.id, turnTimer]);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [gameState, currentTurn, socket?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCellClick = useCallback(
     (number) => {
@@ -318,15 +338,15 @@ const Bingo = () => {
             <input
               type="text"
               value={profile.name}
-              onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+              onChange={(e) => setProfile((prev) => ({ ...prev, name: e.target.value }))}
               placeholder="Enter your name"
               className="w-full sketch-border font-handwriting text-ink px-3 py-2 rounded mb-4"
             />
             <AvatarSelector
               avatarIcon={profile.avatarIcon}
               color={profile.color}
-              onAvatarChange={(icon) => setProfile({ ...profile, avatarIcon: icon })}
-              onColorChange={(c) => setProfile({ ...profile, color: c })}
+              onAvatarChange={(icon) => setProfile((prev) => ({ ...prev, avatarIcon: icon }))}
+              onColorChange={(c) => setProfile((prev) => ({ ...prev, color: c }))}
             />
             <div className="flex gap-4 mt-4">
               <SketchButton onClick={handleCreateRoom}>Create Room</SketchButton>

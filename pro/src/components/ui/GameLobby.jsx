@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import SketchButton from './SketchButton';
 import AvatarSelector from './AvatarSelector';
 import CountdownOverlay from './CountdownOverlay';
@@ -26,6 +26,7 @@ const GameLobby = ({
   const [dots, setDots] = useState('');
   const [shareSupported] = useState(() => !!navigator.share);
   const [copied, setCopied] = useState(false);
+  const joinInputRef = useRef(null);
 
   const actuallyCanStart = canStart ?? players.length >= minPlayers;
 
@@ -158,11 +159,11 @@ const GameLobby = ({
                 placeholder="Enter Room ID"
                 className="flex-1 px-3 py-2 border border-ink/30 rounded sketch-font text-ink bg-white/80"
                 id="join-room-input"
+                ref={joinInputRef}
               />
               <SketchButton
                 onClick={() => {
-                  const input = document.getElementById('join-room-input');
-                  if (input?.value) onJoinSubmit(input.value.trim().toUpperCase());
+                  if (joinInputRef.current?.value) onJoinSubmit(joinInputRef.current.value.trim().toUpperCase());
                 }}
                 className="text-sm"
               >
